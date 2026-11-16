@@ -1,5 +1,3 @@
-"""Renderer output invariants: width, colour codes, edge cases, ramp."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -78,13 +76,11 @@ def test_ascii_ramp_is_seventy_chars_dark_to_bright() -> None:
 
 def test_ascii_contrast_makes_dark_frames_legible() -> None:
     dark = np.full((40, 60, 3), 12, dtype=np.uint8)
-    dark[10:30, 10:50] = 40  # subtle subject on a near-black background
+    dark[10:30, 10:50] = 40
     art = get_renderer("ascii", width=60, rows=40, color=False).render(
         np.asarray(dark)
     )
     glyphs = {char for char in art if char != "\n"}
-    # Perfect contrast stretching reaches both ends of the ramp; without it the
-    # whole frame would render as a single dark glyph.
     assert " " in glyphs
     assert "$" in glyphs
 

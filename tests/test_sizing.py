@@ -1,5 +1,3 @@
-"""Geometry contract: renderers must fit the terminal without distorting."""
-
 from __future__ import annotations
 
 import pytest
@@ -7,12 +5,12 @@ import pytest
 from curlcast.renderers import get_renderer
 
 SIZES = [
-    (1600, 900),  # 16:9
-    (1600, 1200),  # 4:3
-    (800, 800),  # 1:1
-    (1080, 1920),  # 9:16 portrait
-    (2560, 1080),  # ultrawide
-    (64, 48),  # small
+    (1600, 900),
+    (1600, 1200),
+    (800, 800),
+    (1080, 1920),
+    (2560, 1080),
+    (64, 48),
 ]
 
 GRIDS = [(40, 23), (80, 24), (120, 50), (10, 5)]
@@ -36,13 +34,10 @@ def test_fit_preserves_source_aspect(mode: str, size: tuple[int, int]) -> None:
     renderer = get_renderer(mode, width=120, rows=60)
     width, height = renderer.fit(*size)
     expected = size[0] / size[1]
-    # One pixel of rounding is allowed; a wrong PIXEL_ASPECT is off by 2x.
     assert abs((width / height) / expected - 1.0) < 0.06
 
 
 def test_ascii_samples_one_pixel_row_per_character() -> None:
-    # ASCII cells are already 2:1, so doubling the sample height is the bug
-    # that used to emit 46 lines into a 24-row terminal.
     assert get_renderer("ascii").PIXEL_ASPECT == 1.0
 
 

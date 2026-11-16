@@ -1,5 +1,3 @@
-"""CLI wiring: exit codes, option validation and end-to-end rendering."""
-
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,24 +1,3 @@
-"""``--mode ascii``: a 70-glyph density ramp with optional truecolor.
-
-The ramp runs from darkest (space) to brightest (``$``). Character selection
-uses luminance; colour, when enabled, is painted per glyph with the source
-pixel's RGB.
-
-Contrast
---------
-A fixed linear mapping wastes most of the ramp on typical photos. Instead each
-frame is clipped to its 2nd-98th luminance percentile. For video that range is
-smoothed with an exponential moving average, because recomputing it from
-scratch every frame makes brightness "pump" as the scene changes.
-
-Aspect
-------
-ASCII uses ``PIXEL_ASPECT = 1.0``: one glyph per sampled pixel. The terminal
-cell is ~2:1, which restores the source aspect. Requesting two pixel rows per
-cell (the HD behaviour) would emit twice the requested number of lines and
-stretch the image vertically.
-"""
-
 from __future__ import annotations
 
 import numpy as np
@@ -26,7 +5,6 @@ import numpy as np
 from curlcast.renderers._pixels import as_rgb, luma, pack_rgb
 from curlcast.renderers.base import BaseRenderer
 
-# 70 characters, dark -> bright.
 RAMP = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
 RAMP_ARRAY = np.array(list(RAMP), dtype="<U1")
 _RESET = "\x1b[0m"
@@ -34,8 +12,6 @@ _MAX_CACHE = 16_384
 
 
 class AsciiRenderer(BaseRenderer):
-    """Luminance-ramp renderer with adaptive contrast and optional colour."""
-
     PIXEL_ASPECT: float = 1.0
 
     def __init__(self, width: int = 0, color: bool = True, rows: int = 0) -> None:
@@ -44,9 +20,7 @@ class AsciiRenderer(BaseRenderer):
         self._high: float | None = None
         self._color_cache: dict[int, str] = {}
 
-    # ------------------------------------------------------------------
     def reset_contrast(self) -> None:
-        """Forget the smoothed luminance window (call between media files)."""
         self._low = None
         self._high = None
 
@@ -59,7 +33,6 @@ class AsciiRenderer(BaseRenderer):
             high = low + 1.0
 
         if self._low is None or self._high is None:
-            # First frame: adopt the exact window so static images are crisp.
             self._low, self._high = low, high
         else:
             smoothing = 0.2
@@ -80,7 +53,6 @@ class AsciiRenderer(BaseRenderer):
         self._color_cache[packed] = code
         return code
 
-    # ------------------------------------------------------------------
     def render(self, frame: np.ndarray) -> str:
         rgb = as_rgb(frame)
         height, width = rgb.shape[:2]

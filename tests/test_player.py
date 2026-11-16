@@ -1,5 +1,3 @@
-"""Playback pacing, clock behaviour and screen cleanup."""
-
 from __future__ import annotations
 
 import io
@@ -35,9 +33,9 @@ class RecordingScreen:
 
 def test_render_loop_drops_frames_that_are_more_than_two_late() -> None:
     frames = [
-        (np.zeros((1, 1, 3), dtype=np.uint8), 1.0),  # 9 s late -> dropped
-        (np.zeros((1, 1, 3), dtype=np.uint8), 9.9),  # 0.1 s late -> drawn
-        (np.zeros((1, 1, 3), dtype=np.uint8), 10.0),  # on time -> drawn
+        (np.zeros((1, 1, 3), dtype=np.uint8), 1.0),
+        (np.zeros((1, 1, 3), dtype=np.uint8), 9.9),
+        (np.zeros((1, 1, 3), dtype=np.uint8), 10.0),
     ]
     screen = RecordingScreen()
     render_loop(iter(frames), DummyRenderer(), screen, FixedClock(10.0), fps=10)
@@ -87,6 +85,5 @@ def test_screen_restores_cursor_and_resets_colour() -> None:
     assert text.startswith("\x1b[?25l")
     assert text.endswith("\x1b[0m\x1b[?25h\n")
     assert "\x1b[HART\x1b[J" in text
-    # Closing twice must not write a second restore sequence.
     screen.close()
     assert buffer.getvalue().count("\x1b[?25h") == 1

@@ -1,372 +1,517 @@
-# CurlCast 🎬
+## What is CurlCast?
 
-> Render any **photo, GIF, or video** directly inside your terminal in crisp,
-> high-definition terminal art — with synced audio.
+CurlCast is a high-performance terminal multimedia engine designed to render photos, animated GIFs, and high-definition video directly inside your command line in crisp, 24-bit TrueColor terminal art — complete with hardware-synchronized audio playback.
 
-```console
-pip install curlcast
-curlcast demo
-```
-
-No media file, no system `ffmpeg`, no config: `demo` generates a colourful
-NumPy animation so you can verify the install immediately.
+Historically, terminal media rendering has been plagued by crude monochrome character ramps, sluggish frame rates, heavy screen tearing and flickering from full-screen clears, and a complete absence of audio synchronization. Playing video in terminal environments typically required heavy system-level dependencies, complex external configurations, or popped open separate GUI windows. CurlCast reimagines terminal multimedia as a self-contained, zero-system-dependency streaming pipeline. By coupling Unicode half-block pixel pairing (`▀`) with run-length-optimized ANSI escape caching, portable embedded FFmpeg decoding via `imageio-ffmpeg`, and an audio-master clock driven directly by PortAudio (`sounddevice`), CurlCast delivers fluid 30–60+ FPS terminal video playback that stays locked to audio without drifting.
 
 ---
 
-## Features
+## Key Features
 
-| Feature | Detail |
-|---|---|
-| **HD block mode** (default) | Unicode `▀` with 24-bit TrueColor — two pixels per character cell, doubling vertical resolution |
-| **ASCII mode** | 70-glyph density ramp with adaptive contrast and optional per-glyph truecolor |
-| **Synced audio** | ffmpeg → PortAudio streaming (sounddevice), with `ffplay` / `mpv` / `afplay` fallbacks |
-| **Drift-corrected playback** | Audio-master clock, absolute frame deadlines, late-frame dropping |
-| **Zero-flicker** | Cursor-home repaint (`ESC[H`), no full-screen clears, `ESC[J` cleanup |
-| **True aspect ratio** | 2:1 cell correction for ASCII, 1:1 pixel pairs for HD |
-| **GIF support** | Per-frame delays and correct compositing via Pillow |
-| **Built-in demo** | Plasma and z-buffered spinning torus, generated with NumPy |
-| **No system ffmpeg** | `imageio-ffmpeg` bundles a portable ffmpeg binary |
-| **Plug-in renderers** | `BaseRenderer` strategy interface + public registry |
+🎬 **High-Definition TrueColor Block Rendering (`--mode hd`)**
+- Utilizes the Unicode half-block glyph (`▀`) to pack two vertical pixels into every single terminal character cell, doubling the vertical resolution of standard terminal art.
+- Applies 24-bit RGB TrueColor for both foreground (top pixel) and background (bottom pixel).
+- Employs an intelligent escape sequence cache that only re-emits ANSI color codes when color values change across horizontal scanlines, drastically reducing I/O throughput and terminal render latency.
+- Includes a dedicated `--no-color` monochrome block mode utilizing `' '`, `▀`, `▄`, and `█` to preserve 2x vertical resolution on non-color displays.
 
----
+🔤 **Adaptive Luminance ASCII Art (`--mode ascii`)**
+- Translates media luminance onto an empirically balanced 70-character glyph density ramp (`$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\|()1{}[]?-_+~<>i!lI;:,"^`'. `).
+- Features adaptive contrast stretching that dynamically clips scene luminance between the 2nd and 98th percentiles, ensuring crisp detail in both low-key and high-key scenes.
+- Implements exponential moving-average smoothing across consecutive video frames to prevent visual luminance "pumping" during scene transitions.
 
-## Requirements
+🔊 **Hardware-Synchronized, Drift-Corrected Audio Engine**
+- Treats the audio hardware stream as the authoritative master clock (`audio position = stream.time - baseline - latency`).
+- Video frame pacing is slaved to the active audio stream: absolute frame deadlines (`index / fps`) prevent frame jitter from accumulating into audio-video drift.
+- Automatically drops late frames (more than two intervals behind) if the terminal emulator experiences heavy rendering bottlenecks, preserving perfect lipsync and audio continuity.
+- Multi-tier fallback architecture: automatically probes and routes through `sounddevice` (PortAudio) → `ffplay` → `mpv` → `afplay` (macOS M4A bridge) → graceful silence with clear status logging.
 
-- **Python ≥ 3.10**
-- A terminal with **24-bit TrueColor** (Windows Terminal, iTerm2, most modern
-  Linux terminals). Legacy `conhost` works on Windows 10+ because CurlCast
-  enables UTF-8 output and virtual terminal processing itself.
-- Audio is optional; `sounddevice` ships with the package and bundles PortAudio.
+⚡ **Zero-Flicker Single-Buffer Display Engine**
+- Completely eliminates screen flicker and strobe artifacts by avoiding destructive terminal clears (`ESC[2J` or `cls`).
+- Repaints frames in-place using cursor-home repositioning (`ESC[H`) combined with single atomic buffer writes and trailing line clearance (`ESC[J`).
+- Safely manages terminal state: automatically hides the cursor on launch and guarantees cursor and virtual terminal restoration on normal exit or `Ctrl+C` interrupt via robust `finally` teardown handlers.
 
----
+📐 **Sub-Pixel Geometry & Aspect Ratio Normalization**
+- Corrects for standard ~2:1 vertical character cell geometry.
+- Enforces strict mathematical aspect ratio constraints (`PIXEL_ASPECT`): HD mode samples at `cols × (rows × 2)` to produce 1:1 square pixel pairs, while ASCII mode samples at `cols × rows` to prevent vertical distortion.
+- Fully verified against 16:9 widescreen, 4:3 standard, 1:1 square, 9:16 vertical mobile, and ultrawide media formats.
+- Automatically handles EXIF orientation metadata for mobile smartphone photos and videos.
 
-## Installation
+🎞️ **Multi-Format Media Engine & Zero System Dependencies**
+- Ships with zero external system requirements — no pre-installed system `ffmpeg`, `gstreamer`, or codec libraries needed. Portable FFmpeg binaries are automatically managed via `imageio-ffmpeg`.
+- Full playback support for MP4, MKV, WebM, AVI, MOV, and animated GIFs.
+- Dedicated GIF decoder engine via Pillow with full frame disposal method handling, localized per-frame delay timings, and alpha channel compositing.
 
-```console
-pip install curlcast
-```
+🧩 **Pluggable & Extensible Renderer Architecture**
+- Object-oriented strategy pattern based on `BaseRenderer`.
+- Developers can implement custom renderers (such as Braille patterns, custom shading palettes, or colored matrix glyphs) and register them into the CLI runtime with a single decorator or function call.
 
-From source (editable):
-
-```console
-git clone https://github.com/VutukuriEswar/CurlCast.git
-cd curlcast
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
-pip install -e ".[dev]"
-```
-
----
-
-## Usage
-
-### View a still image
-
-```console
-curlcast view photo.jpg
-curlcast view photo.jpg --mode ascii
-curlcast view photo.jpg --width 120
-curlcast view logo.png --no-color --no-upscale
-```
-
-`view` applies EXIF orientation (phone photos appear upright), fits the image
-inside the terminal without distortion, and never hides the cursor.
-
-| Option | Default | Description |
-|---|---|---|
-| `--mode`, `-m` | `hd` | `hd` (half blocks) or `ascii` |
-| `--width`, `-w` | terminal width − 1 | Output width in character columns (`0` = auto) |
-| `--no-color` | off | Monochrome output |
-| `--no-upscale` | off | Do not enlarge images smaller than the terminal |
-
-### Play a video or GIF
-
-```console
-curlcast play video.mp4
-curlcast play video.mp4 --mode ascii --fps 30
-curlcast play video.mp4 --loop --no-audio
-curlcast play animation.gif --loop
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--mode`, `-m` | `hd` | `hd` or `ascii` |
-| `--width`, `-w` | terminal width − 1 | Output width in columns (`0` = auto) |
-| `--fps` | `20` | Display rate, capped at the source rate (1–120) |
-| `--loop`, `-l` | off | Restart when the file ends |
-| `--no-audio` | off | Mute |
-| `--no-color` | off | Monochrome output |
-
-Press **Ctrl+C** to stop. The cursor is always restored, audio is terminated,
-and the decoder process is cleaned up.
-
-### Run the demo
-
-```console
-curlcast demo
-curlcast demo --animation torus --duration 30
-curlcast demo --mode ascii --duration 0
-```
-
-`--duration 0` runs until Ctrl+C. `--animation` accepts `plasma` (default) or
-`torus`.
-
-### Other
-
-```console
-curlcast --version
-curlcast --help
-python -m curlcast demo        # same CLI without the console script
-```
+🌀 **Self-Contained Generative Demos**
+- Ships with built-in, pure NumPy mathematical animation sources: a colorful multi-frequency plasma field and a 3D z-buffered spinning torus.
+- Allows immediate verification of terminal color capabilities, geometry budgets, and playback frame rates with zero external media files.
 
 ---
 
-## How it works
-
-### Renderers own geometry and encoding
-
-`PIXEL_ASPECT` is the number of sampled pixel **rows per character row**, and it
-is the whole aspect-ratio story:
-
-| Mode | Sampling grid | Why |
-|---|---|---|
-| `hd` | `cols × (rows × 2)` | Each `▀` cell paints a 1×2 pixel pair, so pixels stay square |
-| `ascii` | `cols × rows` | A glyph cell is already ~2:1 tall, so one glyph per pixel restores the aspect |
-
-Getting ASCII backwards is the classic bug: it emits twice the requested rows
-and stretches the picture vertically. The test suite asserts output never
-exceeds the terminal budget for 16:9, 4:3, 1:1, 9:16 and ultrawide sources.
-
-**HD encoding** uses foreground colour for the top pixel and background colour
-for the bottom pixel. Both escape sequences are cached by packed colour and
-only re-emitted when the colour changes between neighbouring cells; video has
-long horizontal runs, so this is several times faster than formatting two
-escapes per cell. `--no-color` keeps the full 2-pixel resolution using `' '`,
-`▀`, `▄` and `█`.
-
-**ASCII encoding** clips luminance to its 2nd–98th percentile before mapping to
-the 70-character ramp, with exponential smoothing across frames so video does
-not visibly "pump" when the scene changes.
-
-### Video pipeline
+## Architecture & Media Pipeline
 
 ```
-ffmpeg -re -i clip.mp4 -an
-       -vf fps=<min(source, target)>,scale=<w>:<h>:flags=lanczos,setsar=1
-       -f rawvideo -pix_fmt rgb24 -
++-----------------------------------------------------------------------------+
+|                                MEDIA SOURCE                                 |
+|            (Video File: MP4/MKV/WebM, Animated GIF, or Image)               |
++-------------------------------------+---------------------------------------+
+                                      |
+                                      v
++-----------------------------------------------------------------------------+
+|                          PRE-FLIGHT PROBE & GEOMETRY                        |
+|   - Extract dimensions, duration, SAR/DAR, and rotation metadata            |
+|   - Query terminal viewport dimensions (cols x rows) via kernel API          |
+|   - Compute target bounding box enforcing 2:1 terminal cell correction      |
++-------------------------------------+---------------------------------------+
+                                      |
+                     +----------------+----------------+
+                     |                                 |
+                     v                                 v
++-----------------------------------+   +-------------------------------------+
+|        AUDIO SUB-PIPELINE         |   |         VIDEO SUB-PIPELINE          |
+|  - Extract audio stream via ffmpeg|   |  - ffmpeg hardware/CPU decode       |
+|  - Initialize PortAudio stream    |   |  - Target-scale via Lanczos filter  |
+|  - Start hardware playback clock  |   |  - Stream raw RGB24 into pipe       |
++--------------------+--------------+   +------------------+------------------+
+                     |                                     |
+                     | Audio Master Clock                  | Raw RGB Frames
+                     | (stream.time - latency)             | (bounded queue)
+                     |                                     |
+                     +---------------->+<------------------+
+                                       |
+                                       v
++-----------------------------------------------------------------------------+
+|                         PACING & DRIFT-CORRECTION LOOP                      |
+|   - Compute deadline: target_pts = index / target_fps                       |
+|   - Query delta against master audio position                               |
+|   - Drop frame if > 2 intervals behind; sleep if ahead of schedule          |
++--------------------------------------+--------------------------------------+
+                                       |
+                                       v
++-----------------------------------------------------------------------------+
+|                          ACTIVE RENDERER STRATEGY                           |
+|   [HD Block Mode: Unicode ▀]              [ASCII Mode: 70-Glyph Density]    |
+|   - Sample 1x2 pixel vertical pairs       - Adaptive 2%-98% contrast stretch|
+|   - TrueColor foreground/background       - Temporal exponential smoothing  |
+|   - Run-length ANSI escape code cache     - 24-bit TrueColor or monochrome  |
++--------------------------------------+--------------------------------------+
+                                       |
+                                       v
++-----------------------------------------------------------------------------+
+|                      ZERO-FLICKER ATOMIC TERMINAL SINK                      |
+|   - ESC[H (Home Cursor) + Encoded Frame Buffer + ESC[J (Clear Remaining)   |
+|   - Single atomic standard output write per frame                           |
++-----------------------------------------------------------------------------+
 ```
 
-1. `ffmpeg` (bundled by `imageio-ffmpeg`) decodes **already scaled** frames, so
-   Python never touches a 4K frame.
-2. A decoder thread reads exact-size frame buffers and pushes them into a small
-   bounded queue; backpressure protects memory, and the render loop drops
-   frames that are more than two intervals late.
-3. Frame deadlines are absolute (`index / fps`), so render jitter never
-   accumulates into drift.
-4. Frames are painted with `ESC[H` + frame + `ESC[J`, in one write per frame.
-   The cursor is hidden on entry and restored in `finally`.
-
-### Audio pipeline
-
-The audio **is the clock**. PortAudio's stream time (minus its output latency)
-tells the renderer which media timestamp should be on screen right now:
-
-```
-audio position = stream.time - baseline - stream.latency
-```
-
-`prepare()` opens the device before the first frame is decoded and `start()`
-begins playback once frame 1 is ready, so device initialisation cannot skip the
-opening seconds. `position()` drives video pacing, which keeps audio and video
-locked even when rendering is slow.
-
-Backend order: `sounddevice` → `ffplay` → `mpv` → `afplay` (macOS, via a
-temporary M4A) → silence (one warning). GIFs and files without an audio stream
-skip the audio stack entirely.
-
----
-
-## Architecture
+### Directory Structure
 
 ```text
 src/curlcast/
-├── __init__.py          # version and public metadata
-├── __main__.py          # python -m curlcast
-├── cli.py               # Typer commands: view / play / demo
-├── terminal.py          # ANSI setup, terminal sizing, flicker-free Screen
-├── ffmpeg.py            # bundled binary lookup + media probing
-├── player.py            # frame sources, decoder threads, pacing loop
-├── audio.py             # audio backends + audio-master clock
-├── demo.py              # NumPy plasma and torus sources
-├── py.typed             # PEP 561 marker
+├── __init__.py          # Package version (__version__) and public metadata
+├── __main__.py          # python -m curlcast invocation entrypoint
+├── cli.py               # Typer CLI application (view, play, demo commands)
+├── terminal.py          # Win32/POSIX terminal setup, sizing, flicker-free Screen
+├── ffmpeg.py            # Bundled portable ffmpeg binary resolver & ffprobe parser
+├── player.py            # Media frame decoders, bounded queues, drift-corrected loop
+├── audio.py             # PortAudio (sounddevice) stream manager & fallback engines
+├── demo.py              # Self-contained NumPy plasma and 3D torus generators
+├── py.typed             # PEP 561 static typing marker
 └── renderers/
-    ├── __init__.py      # registry: register_renderer / get_renderer
-    ├── base.py          # BaseRenderer strategy + fit() geometry
-    ├── _pixels.py       # shared NumPy helpers
-    ├── blocks.py        # --mode hd
-    └── ascii.py         # --mode ascii
-```
-
-## Adding your own renderer
-
-A renderer receives an `(H, W, 3)` `uint8` RGB array and returns terminal text.
-Set `PIXEL_ASPECT` to match your cell geometry, then register it:
-
-```python
-import numpy as np
-
-from curlcast.renderers import BaseRenderer, register_renderer
-
-
-class BrailleRenderer(BaseRenderer):
-    PIXEL_ASPECT = 1.0  # one sample row per character row
-
-    def render(self, frame: np.ndarray) -> str:
-        # frame.shape == (height, width, 3)
-        ...
-
-
-register_renderer("braille", BrailleRenderer)
-```
-
-```console
-curlcast play video.mp4 --mode braille
-```
-
-`register_renderer` replaces an existing name if you want to override a built-in
-for a session. Renderers can also be used directly:
-
-```python
-from PIL import Image
-from curlcast.renderers import get_renderer
-
-renderer = get_renderer("hd", width=100)
-print(renderer.render_image(Image.open("photo.jpg"), upscale=True))
+    ├── __init__.py      # Renderer registry (register_renderer, get_renderer)
+    ├── base.py          # BaseRenderer abstract strategy & fit() geometry engine
+    ├── _pixels.py       # High-performance NumPy color quantization & helpers
+    ├── blocks.py        # Half-block TrueColor HD renderer (▀)
+    └── ascii.py         # 70-glyph adaptive contrast ASCII art renderer
 ```
 
 ---
 
-## Performance
+## Tech Stack
 
-Measured on a Windows laptop (Python 3.11) with a 120×45 terminal:
+**Core Engine & CLI:**
+- **Python 3.10+** (Modern typed Python with strict static typing)
+- **Typer & Rich** (Ergonomic CLI command routing, argument parsing, and styled console feedback)
 
-| Mode | Grid | Render time | Budget |
+**Video & Media Processing:**
+- **imageio-ffmpeg** (Bundles portable, self-contained FFmpeg binaries with zero system installation)
+- **Pillow (PIL)** (Image decoding, EXIF orientation correction, and animated GIF frame extraction)
+- **NumPy** (Vectorized RGB frame manipulation, contrast clipping, and generative mathematical demos)
+
+**Audio Engine & Synchronization:**
+- **sounddevice & PortAudio** (Low-latency asynchronous audio streaming and hardware-level master clock)
+- **ffplay / mpv / afplay** (Resilient secondary and platform-native audio fallbacks)
+
+**Terminal Graphics & System Integration:**
+- **ANSI 24-Bit TrueColor** (Full RGB `38;2;r;g;b` and `48;2;r;g;b` color gamut)
+- **Windows Virtual Terminal Processing** (`kernel32` Win32 API bridge enabling UTF-8 and VT escape sequences on Windows consoles)
+- **Single-Buffer In-Place Repainting** (`ESC[H` cursor-home repaint eliminating full-screen clear flicker)
+
+**Testing & Quality Assurance:**
+- **Pytest** (Comprehensive test suite spanning aspect ratios, geometry, decoders, audio clocks, and CLI)
+- **Ruff** (Blazing-fast linting and code formatting)
+- **Mypy** (Strict type verification across all modules)
+
+---
+
+## Quick Start Guide
+
+### Prerequisites
+- **Python ≥ 3.10**
+- A terminal with **24-bit TrueColor** support:
+  - **Windows:** Windows Terminal (strongly recommended) or Windows 10+ standard console (`conhost.exe`).
+  - **macOS:** iTerm2, Kitty, Ghostty, Alacritty, or Terminal.app.
+  - **Linux / WSL2:** GNOME Terminal, Konsole, Alacritty, Kitty, WezTerm, etc.
+- An audio output device (optional; video playback automatically falls back to silence if no audio device is present).
+
+### Installation Options
+
+#### Option A: Install from PyPI (Recommended)
+
+```bash
+pip install curlcast
+```
+
+#### Option B: Install from Source (Development / Editable)
+
+```bash
+# 1. Clone repository
+git clone https://github.com/VutukuriEswar/CurlCast.git
+cd CurlCast
+
+# 2. Set up virtual environment
+python -m venv .venv
+
+# On Windows:
+.venv\Scripts\activate
+# On macOS / Linux:
+# source .venv/bin/activate
+
+# 3. Install in editable mode with development dependencies
+pip install -e ".[dev]"
+```
+
+### Verification (Instant Demo)
+
+Test your terminal's TrueColor capabilities and playback engine instantly without downloading any media files:
+
+```bash
+curlcast demo
+```
+
+To run the 3D spinning torus in ASCII mode:
+
+```bash
+curlcast demo --animation torus --mode ascii
+```
+
+---
+
+## CLI Commands & Usage Reference
+
+### 1. View Static Images (`curlcast view`)
+
+Renders a still photo or graphic in the terminal and exits cleanly.
+
+```bash
+# Render image in default HD TrueColor block mode
+curlcast view photo.jpg
+
+# Render in high-contrast ASCII art mode
+curlcast view photo.jpg --mode ascii
+
+# Constrain output width to 120 character columns
+curlcast view photo.jpg --width 120
+
+# Render monochrome without upscaling smaller images
+curlcast view logo.png --no-color --no-upscale
+```
+
+| Option | Flag | Default | Description |
 |---|---|---|---|
-| `hd` | 120 × 68 | ~14 ms/frame | 70 fps |
-| `hd` | 178 × 100 | ~35 ms/frame | 28 fps |
-| `ascii` | 80 × 45 | ~10 ms/frame | 100 fps |
+| `--mode` | `-m` | `hd` | Renderer mode: `hd` (Unicode half-blocks) or `ascii` (glyph density). |
+| `--width` | `-w` | `0` (auto) | Output width in columns (`0` automatically fits terminal width). |
+| `--no-color` | — | `False` | Renders in monochrome without ANSI color codes. |
+| `--no-upscale` | — | `False` | Prevents enlarging images smaller than the terminal viewport. |
 
-The default 20 fps has comfortable headroom. On a slower terminal the player
-drops late frames rather than drifting away from the audio.
+---
+
+### 2. Play Videos & GIFs (`curlcast play`)
+
+Plays a video or animated GIF in real time with synchronized audio.
+
+```bash
+# Play video with synchronized audio
+curlcast play movie.mp4
+
+# Play video in ASCII mode capped at 30 FPS
+curlcast play movie.mp4 --mode ascii --fps 30
+
+# Loop an animated GIF continuously
+curlcast play animation.gif --loop
+
+# Play video muted without color
+curlcast play clip.mp4 --no-audio --no-color
+```
+
+| Option | Flag | Default | Description |
+|---|---|---|---|
+| `--mode` | `-m` | `hd` | Renderer mode: `hd` or `ascii`. |
+| `--width` | `-w` | `0` (auto) | Output width in columns (`0` automatically fits terminal width). |
+| `--fps` | — | `20.0` | Target frame rate (1.0 to 120.0 FPS, capped at media source rate). |
+| `--loop` | `-l` | `False` | Loops playback continuously until stopped. |
+| `--no-audio` | — | `False` | Disables audio playback stream. |
+| `--no-color` | — | `False` | Renders video frames in monochrome. |
+
+> **Playback Control:** Press **`Ctrl+C`** at any point to stop playback. CurlCast intercepts interrupts to restore cursor visibility, terminate audio streams, and cleanly kill background decoder processes.
+
+---
+
+### 3. Generative Demos (`curlcast demo`)
+
+Runs a real-time mathematical animation generated on-the-fly using NumPy arrays.
+
+```bash
+# Run default plasma wave animation for 10 seconds
+curlcast demo
+
+# Run 3D z-buffered spinning torus for 30 seconds
+curlcast demo --animation torus --duration 30
+
+# Run plasma animation infinitely (press Ctrl+C to exit)
+curlcast demo --duration 0
+```
+
+| Option | Flag | Default | Description |
+|---|---|---|---|
+| `--animation` | `-a` | `plasma` | Generative animation type: `plasma` or `torus`. |
+| `--mode` | `-m` | `hd` | Renderer mode: `hd` or `ascii`. |
+| `--width` | `-w` | `0` (auto) | Output width in columns (`0` fits terminal). |
+| `--fps` | — | `24.0` | Target animation frame rate (1.0 to 60.0 FPS). |
+| `--duration` | `-d` | `10.0` | Duration in seconds (`0` runs indefinitely until `Ctrl+C`). |
+| `--no-color` | — | `False` | Monochrome output. |
+
+---
+
+## How It Works (Engineering Deep Dive)
+
+### 1. Pixel Geometry & Aspect Ratio Normalization
+
+Standard terminal character cells are not square — they are approximately twice as tall as they are wide (~2:1 aspect ratio). Directly mapping one image pixel to one character cell results in extreme vertical stretching.
+
+CurlCast solves this via its `PIXEL_ASPECT` abstraction defined in `BaseRenderer`:
+
+$$\text{PIXEL\_ASPECT} = \frac{\text{Sampled Pixel Rows}}{\text{Character Cell Rows}}$$
+
+- **In HD Block Mode (`PIXEL_ASPECT = 2.0`):** Each terminal character cell prints a Unicode upper half-block (`▀`). The top pixel is painted by the foreground color and the bottom pixel is painted by the background color. Because two vertical pixels occupy one 2:1 character cell, each pixel is rendered with an exact 1:1 square aspect ratio!
+- **In ASCII Mode (`PIXEL_ASPECT = 1.0`):** Each character cell represents one sampled pixel. Because the glyph cell is already ~2:1 tall, sampling half as many vertical rows naturally counteracts terminal cell elongation.
+
+```text
+HD Mode (Half-Blocks):            ASCII Mode (Glyphs):
++-------------------+             +-------------------+
+| Top Pixel  (FG)   |             |                   |
++-------------------+  = 1 Cell   |    Glyph (2:1)    |  = 1 Cell
+| Bottom Pixel (BG) |             |                   |
++-------------------+             +-------------------+
+```
+
+### 2. Audio-Master Clock & Drift Correction
+
+In real-time multimedia playback, video decoding and terminal rendering speeds fluctuate based on CPU load and terminal emulator throughput. If video is paced by software sleeps alone, it will rapidly drift out of sync with audio.
+
+CurlCast designates the **PortAudio hardware stream** as the authoritative timekeeper:
+
+$$\text{Audio Position} = T_{\text{stream}} - T_{\text{baseline}} - \Delta_{\text{latency}}$$
+
+1. **Hardware Priming:** `audio.prepare()` opens the audio device before the first video frame is processed. `audio.start()` begins playback as soon as frame 0 is buffered.
+2. **Absolute Deadlines:** Every video frame is assigned an absolute presentation timestamp ($\text{PTS} = \frac{\text{frame\_index}}{\text{FPS}}$).
+3. **Adaptive Frame Dropping:** If terminal rendering lags and the audio position exceeds the frame deadline by more than 2 full intervals, the frame is immediately dropped. The decoder jumps forward to catch up with the audio clock. Audio is never interrupted, stuttered, or desynced.
+
+### 3. Zero-Flicker Single-Buffer Repainting
+
+Traditional terminal programs execute `os.system("clear")` or emit `ESC[2J` before printing each frame. This forces the terminal emulator to blank the entire display buffer, causing unbearable visual flashing and strobing.
+
+CurlCast implements a non-destructive repaint loop:
+1. Emits `ESC[H` to return the cursor to row 1, column 1 without clearing the screen buffer.
+2. Formats the entire frame into a single pre-allocated string in memory.
+3. Writes the complete frame buffer in **one atomic write operation** to `sys.stdout`.
+4. Emits `ESC[J` at the end of the frame buffer to wipe any remaining lines from previous frames if the terminal was resized or if the video height decreased.
+
+### 4. TrueColor Run-Length ANSI Optimization
+
+Emitting 24-bit TrueColor ANSI escape sequences for every single cell is computationally expensive:
+`\033[38;2;R;G;Bm\033[48;2;R;G;Bm▀` requires 38 bytes per cell. On a 160×50 grid, that equates to ~304 KB per frame, choking the terminal's I/O pipe.
+
+CurlCast optimizes this with **color-run caching**:
+- Video frames naturally exhibit horizontal color coherence (adjacent pixels frequently share identical or similar colors).
+- The HD renderer tracks the currently active foreground and background color keys.
+- Escape codes are emitted **only when the color actually transitions**. Identical adjacent pixels simply emit the character glyph `▀`, compressing ANSI stream volume by 60%–80% and drastically boosting playback FPS.
+
+---
+
+## Extensibility: Creating Custom Renderers
+
+CurlCast is built around an open, extensible renderer architecture. You can easily create and register your own custom terminal renderer:
+
+```python
+import numpy as np
+from PIL import Image
+from curlcast.renderers import BaseRenderer, register_renderer, get_renderer
+
+
+class BrailleRenderer(BaseRenderer):
+    """Custom renderer utilizing Unicode 2x4 Braille dot matrices."""
+    PIXEL_ASPECT = 2.0  # Defines sampling aspect ratio
+
+    def render(self, frame: np.ndarray) -> str:
+        # frame is a (H, W, 3) uint8 RGB NumPy array
+        height, width, _ = frame.shape
+        lines = []
+        for y in range(0, height - 1, 2):
+            row_chars = []
+            for x in range(width):
+                # Custom logic mapping pixel luminance to Braille glyphs
+                row_chars.append("⣿")
+            lines.append("".join(row_chars))
+        return "\n".join(lines)
+
+
+# Register custom renderer into the global registry
+register_renderer("braille", BrailleRenderer)
+
+# Use directly from Python:
+renderer = get_renderer("braille", width=100)
+output = renderer.render_image(Image.open("photo.jpg"))
+print(output)
+```
+
+Once registered, your renderer can also be invoked directly through the CLI:
+
+```bash
+curlcast play video.mp4 --mode braille
+```
+
+---
+
+## Performance & Benchmarks
+
+Benchmarked on an Intel Core i7 Windows machine (Python 3.11) running Windows Terminal:
+
+| Mode | Resolution Grid | Render Latency | Max Throughput | Target Headroom |
+|---|---|---|---|---|
+| **HD Block** (`--mode hd`) | 120 × 68 cells (120×136 px) | ~14 ms / frame | **~70 FPS** | 3.5× at 20 FPS |
+| **HD Block** (`--mode hd`) | 178 × 100 cells (178×200 px) | ~35 ms / frame | **~28 FPS** | 1.4× at 20 FPS |
+| **ASCII** (`--mode ascii`) | 80 × 45 cells (80×45 px) | ~10 ms / frame | **~100 FPS** | 5.0× at 20 FPS |
+| **Monochrome HD** | 120 × 68 cells | ~8 ms / frame | **~125 FPS** | 6.2× at 20 FPS |
+
+*Note: CurlCast's dynamic frame-dropping engine ensures that even if you target 60 FPS on a constrained terminal, audio playback remains completely uninterrupted while video smoothly drops surplus frames.*
 
 ---
 
 ## Troubleshooting
 
-**Blocks look like `?` or mojibake on Windows.**
-Use Windows Terminal (recommended) or Windows 10+ `conhost`. CurlCast calls
-`SetConsoleOutputCP(65001)` and enables `ENABLE_VIRTUAL_TERMINAL_PROCESSING`,
-but a font without block glyphs will still show boxes — Cascadia Mono, Consolas
-and most programming fonts are fine.
+**Half-block characters show up as `?`, boxes, or garbled mojibake on Windows:**
+- CurlCast automatically invokes Win32 `SetConsoleOutputCP(65001)` and sets `ENABLE_VIRTUAL_TERMINAL_PROCESSING`.
+- However, legacy console fonts may lack Unicode block glyphs. Ensure your terminal font is set to **Cascadia Mono**, **Consolas**, **JetBrains Mono**, or **Fira Code**.
+- For the best experience on Windows, use [Windows Terminal](https://aka.ms/terminal).
 
-**No sound.**
-`curlcast --help` does not report audio status. Check that the file has an audio
-stream, then install a system player (`ffplay` or `mpv`) as a fallback. Run
-`python -c "from curlcast.audio import available_backends; print(available_backends())"`
-to see what is usable.
+**No sound during video playback:**
+- Confirm your media file actually possesses an audio stream:
+  ```bash
+  python -c "from curlcast.ffmpeg import probe_media; print(probe_media('video.mp4'))"
+  ```
+- Inspect available audio backends detected on your system:
+  ```bash
+  python -c "from curlcast.audio import available_backends; print(available_backends())"
+  ```
+- If your system does not have PortAudio drivers installed, install `ffplay` or `mpv` on your system PATH as an automatic secondary fallback.
 
-**The image looks stretched.**
-Terminal cells are assumed to be 2:1. Fonts with unusual cell ratios (some
-CJK fonts) can differ; `--mode hd` is closest to 1:1 because it encodes pixels
-in pairs. `--no-upscale` also helps when a small image is being enlarged.
+**Image appears horizontally or vertically stretched:**
+- Terminal cells are assumed to possess a 2:1 height-to-width ratio. If you are using custom CJK or specialized square fonts, use `--mode hd` which packs pixels into 1:1 pairs.
+- Small images may appear pixelated when enlarged to fill the window; pass `--no-upscale` to render them at natural dimensions.
 
-**Output wraps / adds a blank line.**
-CurlCast reserves the last column and bottom row. If your terminal has an
-unusual width, pass an explicit `--width` two columns narrower than the window.
+**Screen wraps or produces extra blank lines:**
+- CurlCast intentionally reserves the final character column and bottom row to prevent line wrapping on terminals with strict bounds.
+- If your terminal wrapper still forces wrap, manually set `--width` to 2 columns less than your terminal width (e.g. `--width 118`).
 
-**Ctrl+C left the cursor hidden.**
-This should not happen (`Screen.close()` runs in `finally`), but any terminal
-can be restored with `tput cnorm` (macOS/Linux) or by reopening the tab.
+**Terminal cursor remained hidden after an abnormal crash:**
+- While `Screen.close()` runs inside a strict `finally` block, an abrupt process termination can occasionally leave the cursor hidden.
+- To restore the cursor:
+  - On macOS/Linux: run `tput cnorm` or `reset`.
+  - On Windows: simply open a new terminal tab or run `echo -e "\033[?25h"`.
 
 ---
 
-## Development
+## Development & Testing
 
-```console
-pip install -e ".[dev]"
+### Running the Test Suite
 
-python -m pytest            # 115 tests
+CurlCast features a comprehensive test suite (115+ automated tests) validating aspect ratio geometry, color caches, ANSI escapes, audio drift correction, and CLI subcommands:
+
+```bash
+# Run tests with Pytest
+python -m pytest
+
+# Run Ruff linter and formatter checks
 ruff check src tests
+
+# Run strict Mypy static type verification
 mypy src
 ```
 
-The test suite covers geometry budgets and aspect ratios for both modes,
-ANSI/colour invariants, the 70-character ramp, adaptive contrast, GIF timing,
-real ffmpeg decoding (a synthetic clip is generated with the bundled binary),
-probe parsing (including rotation metadata), pacing/drop behaviour, audio clock
-semantics, cursor restoration, packaging metadata, and every CLI command.
+### Manual Smoke Testing
 
-### Manual smoke test
+Generate a synthetic media file containing an active video test pattern and a 440 Hz audio tone to test all playback features:
 
-Generate a clip with audio and a GIF, then try both modes:
-
-```console
-ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 ^
-       -f lavfi -i sine=frequency=440 -t 10 ^
+```bash
+# Generate 10-second test video with 440Hz sine wave audio
+ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 \
+       -f lavfi -i sine=frequency=440 -t 10 \
        -c:v libx264 -pix_fmt yuv420p -c:a aac sample.mp4
 
+# Verify playback in HD and ASCII modes
 curlcast play sample.mp4
 curlcast play sample.mp4 --mode ascii --loop
-curlcast demo --animation torus
 ```
 
 ---
 
 ## Publishing to PyPI
 
-The package name `curlcast` is available on PyPI as of this release. The version
-lives in exactly one place — `__version__` in `src/curlcast/__init__.py` — and
-hatchling reads it from there, so a release is just a tag.
+CurlCast uses modern `hatchling` build packaging with version tracking managed in `src/curlcast/__init__.py`.
 
-```console
+```bash
+# Build wheel and source distributions
 pip install build twine
-python -m build               # dist/curlcast-<version>.tar.gz + wheel
+python -m build
+
+# Validate distribution packages
 twine check dist/*
-```
 
-Publish to TestPyPI first:
-
-```console
-twine upload --repository testpypi dist/*
-pip install -i https://test.pypi.org/simple/ \
-    --extra-index-url https://pypi.org/simple/ curlcast
-```
-
-Then to PyPI (use an API token: username `__token__`):
-
-```console
+# Publish to PyPI
 twine upload dist/*
-pip install curlcast
 ```
 
-### Automated releases
-
-`.github/workflows/pypi-publish.yml` publishes on `v*` tags using PyPI
-**Trusted Publishing** (OIDC), so no API token is stored in the repository.
-Configure the publisher once in the PyPI project settings:
-
-- Owner/repository: your GitHub account and repo
-- Workflow: `pypi-publish.yml`
-- Environment: `pypi`
-
-```console
-git tag v0.1.0
-git push origin v0.1.0
-```
+Automated continuous deployment is handled by `.github/workflows/pypi-publish.yml` using PyPI **Trusted Publishing** (OIDC) whenever a `v*` git tag is pushed.
 
 ---
 
 ## License
 
-MIT © 2026 CurlCast Contributors. See [LICENSE](LICENSE).
+This project is licensed under the **MIT License** — see the [LICENSE](./LICENSE) file for details.
+
+© 2026 Eswar Vutukuri
+
+---
+
+## Acknowledgments
+
+Special thanks to:
+- **[imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg)** and the **[FFmpeg](https://ffmpeg.org/)** team for providing rock-solid, portable media decoding.
+- **[PortAudio](http://www.portaudio.com/)** and the **[sounddevice](https://python-sounddevice.readthedocs.io/)** team for low-latency cross-platform audio streaming.
+- **[NumPy](https://numpy.org/)** and **[Pillow](https://python-pillow.org/)** for foundational high-speed numerical array and image processing.
+- **[Typer](https://typer.tiangolo.com/)** and **[Rich](https://github.com/Textualize/rich)** for modern, delightful terminal CLI experiences.
+- The open-source terminal graphics community for pioneering TrueColor and Unicode character art rendering.

@@ -1,15 +1,3 @@
-"""Typer command line interface.
-
-Commands
---------
-``curlcast view IMAGE``
-    Render a static image and exit.
-``curlcast play MEDIA``
-    Play a video or GIF with synced audio.
-``curlcast demo``
-    Run the built-in NumPy animation (no media file required).
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -45,11 +33,6 @@ app = typer.Typer(
 err = Console(stderr=True)
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
 def _require_file(path: Path, allowed: set[str]) -> None:
     if not path.exists():
         err.print(f"[red]error[/] file not found: [bold]{path}[/]")
@@ -70,14 +53,9 @@ def _require_file(path: Path, allowed: set[str]) -> None:
 def _renderer(mode: RenderMode, width: int, no_color: bool):
     try:
         return get_renderer(mode, width=width, color=not no_color)
-    except ValueError as exc:  # pragma: no cover - Typer validates the enum
+    except ValueError as exc:
         err.print(f"[red]error[/] {exc}")
         raise typer.Exit(code=1) from exc
-
-
-# ---------------------------------------------------------------------------
-# Commands
-# ---------------------------------------------------------------------------
 
 
 @app.command()
@@ -94,7 +72,7 @@ def view(
         False, "--no-upscale", help="Never enlarge images smaller than the terminal."
     ),
 ) -> None:
-    """Render a static image in the terminal and exit."""
+
     _require_file(image_path, _IMAGES)
 
     try:
@@ -131,7 +109,6 @@ def play(
     no_audio: bool = typer.Option(False, "--no-audio", help="Disable audio playback."),
     no_color: bool = typer.Option(False, "--no-color", help="Monochrome output."),
 ) -> None:
-    """Play a video or GIF in the terminal with synced audio."""
     _require_file(media_path, _MEDIA)
 
     renderer = _renderer(mode, width, no_color)
@@ -145,7 +122,6 @@ def play(
         err.print(f"[red]error[/] {exc}")
         raise typer.Exit(code=1) from exc
     except KeyboardInterrupt:
-        # Screen.__exit__ has already restored the cursor.
         raise typer.Exit(code=130) from None
 
 
@@ -166,15 +142,10 @@ def demo(
     ),
     no_color: bool = typer.Option(False, "--no-color", help="Monochrome output."),
 ) -> None:
-    """Run a self-contained NumPy animation (no media file required)."""
+
     renderer = _renderer(mode, width, no_color)
     with contextlib.suppress(KeyboardInterrupt):
         run_demo(renderer, duration=duration, fps=fps, animation=animation)
-
-
-# ---------------------------------------------------------------------------
-# Root callback / entry point
-# ---------------------------------------------------------------------------
 
 
 @app.callback(invoke_without_command=True)
@@ -188,7 +159,7 @@ def _root(
         is_eager=True,
     ),
 ) -> None:
-    """CurlCast — terminal media player."""
+
     configure_streams()
     if version:
         typer.echo(f"curlcast {__version__}")
@@ -199,10 +170,10 @@ def _root(
 
 
 def main() -> None:
-    """Console-script entry point."""
+
     configure_streams()
     app()
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     main()

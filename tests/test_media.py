@@ -1,5 +1,3 @@
-"""ffmpeg probe parsing and the real decode pipeline."""
-
 from __future__ import annotations
 
 import subprocess

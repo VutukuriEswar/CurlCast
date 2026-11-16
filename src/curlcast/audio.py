@@ -1,30 +1,3 @@
-"""Cross-platform audio playback and the audio-master playback clock.
-
-Backends, tried in order
-------------------------
-1. **sounddevice** (core dependency) — ffmpeg streams raw ``s16le`` PCM into a
-   PortAudio output stream. No temp files, no whole-track buffering, and
-   ``Stream.time`` provides a sample-accurate clock, so video frames can be
-   paced to what the speaker is actually playing.
-2. **ffplay** — used directly on the source file if it is on ``PATH``.
-3. **mpv** — same, audio only.
-4. **afplay** (macOS) — the audio track is extracted to a temp ``.m4a`` with
-   the bundled ffmpeg first; afplay cannot demux ``.mp4`` containers.
-5. **silence** — one warning per process, video still plays.
-
-Lifecycle
----------
-:meth:`AudioManager.prepare` opens the output stream (PortAudio/WASAPI device
-setup can take a moment) **without** starting playback. The player then decodes
-its first frame and calls :meth:`AudioManager.start`, so audio and frame 1 begin
-at the same instant and no frames are lost while the device initialises.
-
-:meth:`AudioManager.position` is the media clock: with sounddevice it reports
-the audible position (``stream.time - baseline - latency``); subprocess
-backends fall back to a monotonic timer started when the process spawns.
-Stopping is immediate and idempotent, so Ctrl+C never leaves sound behind.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -49,20 +22,14 @@ CHUNK_BYTES = CHUNK_FRAMES * CHANNELS * BYTES_PER_SAMPLE
 _SD_STATE: bool | None = None
 _WARNED = False
 
-
-# ---------------------------------------------------------------------------
-# Backend discovery
-# ---------------------------------------------------------------------------
-
-
 def _sounddevice_available() -> bool:
     global _SD_STATE
     if _SD_STATE is None:
         try:
-            import sounddevice  # noqa: F401
+            import sounddevice
 
             _SD_STATE = True
-        except Exception:  # pragma: no cover - headless without PortAudio
+        except Exception:
             _SD_STATE = False
     return _SD_STATE
 
@@ -79,7 +46,6 @@ def _subprocess_candidates() -> list[str]:
 
 
 def available_backends() -> list[str]:
-    """Backends that could be used on this machine (for diagnostics)."""
     names: list[str] = []
     if _sounddevice_available():
         names.append("sounddevice")
@@ -107,7 +73,7 @@ def _terminate(proc: subprocess.Popen[Any]) -> None:
         proc.terminate()
         proc.wait(timeout=1.0)
     except Exception:
-        with contextlib.suppress(Exception):  # already gone
+        with contextlib.suppress(Exception):
             proc.kill()
 
 
@@ -122,20 +88,7 @@ def _spawn(cmd: list[str]) -> subprocess.Popen[Any] | None:
     except (FileNotFoundError, OSError):
         return None
 
-
-# ---------------------------------------------------------------------------
-# Audio manager
-# ---------------------------------------------------------------------------
-
-
 class AudioManager:
-    """Owns one audio backend for one playback pass.
-
-    The object doubles as the playback clock: call :meth:`prepare`, then
-    :meth:`start` just before the first frame, and poll :meth:`position` from
-    the render loop.
-    """
-
     def __init__(self, source: Path, *, muted: bool = False, has_audio: bool = True) -> None:
         self._source = Path(source)
         self._muted = muted or not has_audio
@@ -151,7 +104,6 @@ class AudioManager:
         self._seek = 0.0
         self._fallbacks: list[str] = []
 
-    # ------------------------------------------------------------------
     @property
     def backend(self) -> str:
         return self._backend
@@ -160,12 +112,7 @@ class AudioManager:
     def muted(self) -> bool:
         return self._muted
 
-    # ------------------------------------------------------------------
     def prepare(self, seek: float = 0.0) -> None:
-        """Open the preferred backend without starting playback.
-
-        Safe to call without :meth:`start`; :meth:`stop` releases everything.
-        """
         self.stop()
         self._stop.clear()
         self._seek = max(float(seek), 0.0)
@@ -183,7 +130,6 @@ class AudioManager:
         self._fallbacks = _subprocess_candidates()
 
     def start(self, seek: float | None = None) -> None:
-        """Begin playback and the media clock."""
         if not self._prepared:
             self.prepare(seek if seek is not None else 0.0)
         elif seek is not None:
@@ -207,7 +153,6 @@ class AudioManager:
                 self._warn_once_if_needed()
                 return
 
-        # A subprocess backend is selected; try it, then the remaining ones.
         while self._backend != "none":
             backend = self._backend
             self._backend = "none"
@@ -221,19 +166,17 @@ class AudioManager:
         self._warn_once_if_needed()
 
     def position(self) -> float:
-        """Seconds of media time elapsed at the speaker (or wall clock)."""
         if self._backend == "sounddevice" and self._stream is not None:
             try:
                 elapsed = float(self._stream.time) - self._stream_base
                 return max(0.0, elapsed - float(self._stream.latency))
-            except Exception:  # pragma: no cover - stream closed mid-call
+            except Exception:
                 pass
         if self._started_at is None:
             return 0.0
         return max(0.0, time.perf_counter() - self._started_at)
 
     def stop(self) -> None:
-        """Stop audio immediately; safe to call repeatedly."""
         self._stop.set()
 
         stream, self._stream = self._stream, None
@@ -241,7 +184,7 @@ class AudioManager:
             try:
                 stream.abort(ignore_errors=True)
                 stream.close(ignore_errors=True)
-            except Exception:  # pragma: no cover
+            except Exception:
                 pass
 
         proc, self._proc = self._proc, None
@@ -254,7 +197,7 @@ class AudioManager:
 
         temp_path, self._temp_path = self._temp_path, None
         if temp_path is not None:
-            with contextlib.suppress(OSError):  # Windows may still hold the file
+            with contextlib.suppress(OSError):
                 temp_path.unlink(missing_ok=True)
 
         self._started_at = None
@@ -262,14 +205,10 @@ class AudioManager:
         self._prepared = False
         self._fallbacks = []
 
-    # ------------------------------------------------------------------
-    # sounddevice backend
-    # ------------------------------------------------------------------
     def _open_sounddevice(self) -> bool:
-        """Spawn ffmpeg and open a PortAudio stream (not started yet)."""
         try:
             import sounddevice as sd
-        except Exception:  # pragma: no cover
+        except Exception:
             return False
 
         cmd = [
@@ -333,8 +272,6 @@ class AudioManager:
             return False
         try:
             stream.start()
-            # PortAudio reports a device clock (not seconds since start) on
-            # several host APIs, so keep the baseline and subtract it.
             self._stream_base = float(stream.time)
         except Exception:
             proc, self._proc = self._proc, None
@@ -360,7 +297,6 @@ class AudioManager:
                         break
                     stream.write(chunk)
             except Exception:
-                # Stream aborted or ffmpeg died - both normal on stop.
                 pass
 
         self._thread = threading.Thread(target=feed, name="curlcast-audio", daemon=True)
@@ -368,9 +304,6 @@ class AudioManager:
         self._started_at = time.perf_counter()
         return True
 
-    # ------------------------------------------------------------------
-    # Subprocess backends
-    # ------------------------------------------------------------------
     def _start_subprocess(self, backend: str) -> bool:
         started = self._start_afplay() if backend == "afplay" else self._start_player(backend)
         if started:
@@ -403,7 +336,7 @@ class AudioManager:
         proc = _spawn(cmd)
         if proc is None:
             return False
-        time.sleep(0.05)  # let obviously-broken invocations exit early
+        time.sleep(0.05)
         if proc.poll() is not None:
             return False
         self._proc = proc
@@ -456,8 +389,6 @@ class AudioManager:
         self._proc = proc
         return True
 
-    # ------------------------------------------------------------------
     def _warn_once_if_needed(self) -> None:
-        # Silence is expected for GIFs and files without an audio stream.
         if not self._muted:
             _warn_silent()

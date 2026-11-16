@@ -1,21 +1,3 @@
-"""Frame sources and the drift-corrected playback loop.
-
-Pipeline
---------
-``FFmpegSource`` decodes with the bundled ffmpeg at exactly the size the
-renderer wants (scaling happens in ffmpeg, not Python), a decoder thread pushes
-frames into a tiny bounded queue, and the render loop paints the newest frame
-on time. If rendering falls behind, stale frames are dropped instead of
-letting the video drift away from the audio.
-
-GIF playback uses Pillow (correct frame disposal/compositing and per-frame
-delays) and is paced by cumulative timestamps, never by ``sleep(delay)``.
-
-Cleanup is layered: the generator closes the decoder, ``play`` closes the
-source, and ``Screen`` restores the cursor in ``__exit__``. Ctrl+C therefore
-leaves a usable terminal and silent speakers.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -49,31 +31,20 @@ __all__ = [
     "render_loop",
 ]
 
-#: One decoded RGB frame plus its media timestamp in seconds.
 Frame = tuple[np.ndarray, float]
 
 
 class FrameSource(Protocol):
-    """Anything that can produce timestamped RGB frames."""
-
     fps: float
-
     def frames(self) -> Iterator[Frame]:
-        """Yield ``(rgb_array, timestamp)`` pairs, starting at 0.0."""
 
     def close(self) -> None:
-        """Release decoder resources. Must be idempotent."""
-
 
 class Clock(Protocol):
-    """A source of media time in seconds (``AudioManager`` or ``PerfClock``)."""
 
     def position(self) -> float:
-        """Seconds elapsed since playback started."""
-
 
 class PerfClock:
-    """Wall-clock fallback for audio-less sources (the demo, silent GIFs)."""
 
     def __init__(self) -> None:
         self._start = time.perf_counter()
@@ -83,19 +54,10 @@ class PerfClock:
 
 
 def available_audio_backends() -> list[str]:
-    """Backends usable on this machine (re-exported for the CLI)."""
     from curlcast.audio import available_backends
-
     return available_backends()
 
-
-# ---------------------------------------------------------------------------
-# ffmpeg-backed video
-# ---------------------------------------------------------------------------
-
-
 def _read_exact(stream: IO[bytes], size: int) -> bytes | None:
-    """Read exactly ``size`` bytes, or return ``None`` at end of stream."""
     buffer = bytearray()
     while len(buffer) < size:
         chunk = stream.read(size - len(buffer))
@@ -106,7 +68,6 @@ def _read_exact(stream: IO[bytes], size: int) -> bytes | None:
 
 
 class FFmpegSource:
-    """Video decoder that produces frames already scaled for the terminal."""
 
     def __init__(
         self,
@@ -128,7 +89,6 @@ class FFmpegSource:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
 
-    # ------------------------------------------------------------------
     def frames(self) -> Iterator[Frame]:
         width, height = self._width, self._height
         frame_bytes = width * height * 3
@@ -197,7 +157,6 @@ class FFmpegSource:
         finally:
             self.close()
 
-    # ------------------------------------------------------------------
     def close(self) -> None:
         self._stop.set()
         proc, self._proc = self._proc, None
@@ -220,12 +179,7 @@ def _put(
     item: np.ndarray | None,
     stop: threading.Event,
 ) -> None:
-    """Block until there is room, so real-time playback never loses the tail.
 
-    A bounded queue provides backpressure to the decoder. The consumer still
-    drops *late* frames in :func:`render_loop`, which is what keeps a slow
-    terminal from drifting away from the audio.
-    """
     while not stop.is_set():
         try:
             bucket.put(item, timeout=0.05)
@@ -233,16 +187,7 @@ def _put(
         except queue.Full:
             continue
 
-
-# ---------------------------------------------------------------------------
-# GIF
-# ---------------------------------------------------------------------------
-
-
 class GifSource:
-    """Pillow-based animated GIF/WebP source with per-frame delays."""
-
-    #: GIF timing is variable; 20 fps is only a hint for the drop policy.
     fps: float = 20.0
 
     def __init__(self, path: Path, renderer: BaseRenderer) -> None:
@@ -275,14 +220,8 @@ class GifSource:
         finally:
             image.close()
 
-    def close(self) -> None:  # pragma: no cover - generator owns the handle
+    def close(self) -> None:
         pass
-
-
-# ---------------------------------------------------------------------------
-# Playback loop
-# ---------------------------------------------------------------------------
-
 
 def render_loop(
     frames: Iterable[Frame],
@@ -291,10 +230,9 @@ def render_loop(
     clock: Clock,
     fps: float,
 ) -> None:
-    """Paint timestamped frames in real time, dropping stale ones."""
+
     interval = 1.0 / max(fps, 1e-6)
     for frame, timestamp in frames:
-        # Behind by more than two frames: drop rather than fall further back.
         if timestamp - clock.position() < -2.0 * interval:
             continue
         text = renderer.render(frame)
@@ -310,9 +248,7 @@ def _play_once(
     screen: Screen,
     audio: AudioManager,
 ) -> None:
-    # Open the audio device first (WASAPI/PortAudio setup can take a moment),
-    # then decode frame 1. Nothing is audible until start(), so the decoder
-    # cannot run ahead while the device initialises.
+
     audio.prepare()
     frames = source.frames()
     try:
@@ -335,22 +271,7 @@ def play(
     loop: bool = False,
     muted: bool = False,
 ) -> None:
-    """Play a video or GIF in the terminal.
 
-    Parameters
-    ----------
-    path:
-        Source file (``.mp4``/``.mov``/``.webm``/``.mkv``/``.gif``...).
-    renderer:
-        Instantiated renderer; it owns the output geometry.
-    fps:
-        Upper bound on display frame rate. Sources slower than this keep their
-        native rate instead of duplicating frames.
-    loop:
-        Restart from the beginning when the source ends.
-    muted:
-        Skip audio entirely.
-    """
     path = Path(path)
     if not path.exists():
         raise MediaError(f"file not found: {path}")

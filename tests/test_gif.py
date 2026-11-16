@@ -1,5 +1,3 @@
-"""GIF playback: frame count, sizing and timestamp accumulation."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -49,7 +47,6 @@ def test_gif_with_broken_durations_is_clamped(tmp_path: Path) -> None:
 
     values = [ts for _, ts in GifSource(path, get_renderer("hd", width=8, rows=4)).frames()]
     assert values[0] == 0.0
-    # A zero delay falls back to the 80 ms default rather than spinning.
     assert values[1] == pytest.approx(0.08)
 
 

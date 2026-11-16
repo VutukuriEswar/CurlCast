@@ -1,5 +1,3 @@
-"""Packaging invariants: version single-sourcing and PEP 561 marker."""
-
 from __future__ import annotations
 
 import importlib.metadata
@@ -18,7 +16,7 @@ def test_py_typed_marker_ships_with_the_package() -> None:
 def test_installed_metadata_matches_runtime_version() -> None:
     try:
         installed = importlib.metadata.version("curlcast")
-    except importlib.metadata.PackageNotFoundError:  # pragma: no cover - sdist run
+    except importlib.metadata.PackageNotFoundError:
         pytest.skip("curlcast is not installed in this environment")
     assert installed == curlcast.__version__
 

@@ -1,14 +1,3 @@
-"""Built-in demo animations, generated entirely with NumPy.
-
-``curlcast demo`` must work immediately after ``pip install curlcast`` with no
-media file, no system ffmpeg and no audio device. Two procedural sources are
-available: a classic plasma field (default) and a z-buffered, shaded spinning
-torus.
-
-Both render directly at the renderer's native pixel grid, so HD mode gets the
-full 2-pixels-per-cell resolution and ASCII mode gets square glyphs.
-"""
-
 from __future__ import annotations
 
 import math
@@ -23,14 +12,11 @@ from curlcast.terminal import Screen
 
 
 class DemoAnimation(str, Enum):
-    """Available ``curlcast demo --animation`` values."""
-
     PLASMA = "plasma"
     TORUS = "torus"
 
 
 def _hsv_to_rgb(hue: np.ndarray, saturation: float, value: np.ndarray) -> np.ndarray:
-    """Vectorised HSV -> RGB in the 0..1 range."""
     sector = np.floor(hue * 6.0)
     fraction = hue * 6.0 - sector
     sector = sector.astype(np.intp) % 6
@@ -48,7 +34,6 @@ def _hsv_to_rgb(hue: np.ndarray, saturation: float, value: np.ndarray) -> np.nda
 def _rotate(
     x: np.ndarray, y: np.ndarray, z: np.ndarray, angle_x: float, angle_y: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Rotate points around the X axis, then the Y axis."""
     cos_x, sin_x = math.cos(angle_x), math.sin(angle_x)
     y, z = y * cos_x - z * sin_x, y * sin_x + z * cos_x
     cos_y, sin_y = math.cos(angle_y), math.sin(angle_y)
@@ -57,8 +42,6 @@ def _rotate(
 
 
 class DemoSource:
-    """Procedural animated frame source."""
-
     def __init__(
         self,
         renderer: BaseRenderer,
@@ -79,12 +62,11 @@ class DemoSource:
         ys = np.linspace(0.0, 4.0 * math.pi, self.height, dtype=np.float32)
         self._x, self._y = np.meshgrid(xs, ys)
 
-        # Torus parametrisation: u around the ring, v around the tube.
+
         u_values = np.linspace(0.0, 2.0 * math.pi, 96, dtype=np.float32)
         v_values = np.linspace(0.0, 2.0 * math.pi, 40, dtype=np.float32)
         self._u, self._v = np.meshgrid(u_values, v_values)
 
-    # ------------------------------------------------------------------
     def frames(self) -> Iterator[Frame]:
         index = 0
         while True:
@@ -95,7 +77,6 @@ class DemoSource:
             yield render(timestamp), timestamp
             index += 1
 
-    # ------------------------------------------------------------------
     def _plasma(self, t: float) -> np.ndarray:
         x, y = self._x, self._y
         value = (
@@ -109,7 +90,6 @@ class DemoSource:
         rgb = _hsv_to_rgb(hue, 0.9, 0.35 + 0.65 * value)
         return (rgb * 255.0).astype(np.uint8)
 
-    # ------------------------------------------------------------------
     def _torus(self, t: float) -> np.ndarray:
         width, height = self.width, self.height
         image = np.zeros((height, width, 3), dtype=np.uint8)
@@ -137,7 +117,6 @@ class DemoSource:
         hue = (0.56 + 0.22 * np.sin(self._u + t * 0.8) + 0.12 * np.sin(self._v * 2.0)) % 1.0
         colors = (_hsv_to_rgb(hue, 0.85, 0.16 + 0.84 * light) * 255.0).astype(np.uint8)
 
-        # Painter's algorithm: far-to-near writes leave the nearest sample.
         order = np.argsort(z, axis=None)
         image[screen_y.ravel()[order], screen_x.ravel()[order]] = colors.reshape(-1, 3)[order]
         return image
@@ -150,7 +129,6 @@ def run_demo(
     fps: float = 24.0,
     animation: DemoAnimation = DemoAnimation.PLASMA,
 ) -> None:
-    """Play the generated demo through the normal render loop."""
     source = DemoSource(renderer, duration=duration, fps=fps, animation=animation)
     screen = Screen()
     clock = PerfClock()
