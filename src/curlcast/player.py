@@ -36,13 +36,18 @@ Frame = tuple[np.ndarray, float]
 
 class FrameSource(Protocol):
     fps: float
+
     def frames(self) -> Iterator[Frame]:
+        ...
 
     def close(self) -> None:
+        ...
+
 
 class Clock(Protocol):
 
     def position(self) -> float:
+        ...
 
 class PerfClock:
 

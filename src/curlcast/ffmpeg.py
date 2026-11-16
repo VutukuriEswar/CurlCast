@@ -16,6 +16,8 @@ _ROTATE_RE = re.compile(
 
 
 class MediaError(RuntimeError):
+    pass
+
 
 @dataclass(frozen=True)
 class MediaInfo:

@@ -26,8 +26,7 @@ def _sounddevice_available() -> bool:
     global _SD_STATE
     if _SD_STATE is None:
         try:
-            import sounddevice
-
+            __import__("sounddevice")
             _SD_STATE = True
         except Exception:
             _SD_STATE = False
