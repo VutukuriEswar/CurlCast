@@ -51,9 +51,9 @@ dev = [
 curlcast = "curlcast.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/curlcast"
-Repository = "https://github.com/yourusername/curlcast"
-"Bug Tracker" = "https://github.com/yourusername/curlcast/issues"
+Homepage = "https://github.com/VutukuriEswar/CurlCast"
+Repository = "https://github.com/VutukuriEswar/CurlCast"
+"Bug Tracker" = "https://github.com/VutukuriEswar/CurlCast/issues"
 
 [tool.hatch.version]
 path = "src/curlcast/__init__.py"

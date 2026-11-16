@@ -49,7 +49,7 @@ pip install curlcast
 From source (editable):
 
 ```console
-git clone https://github.com/yourusername/curlcast.git
+git clone https://github.com/VutukuriEswar/CurlCast.git
 cd curlcast
 python -m venv .venv
 .venv\Scripts\activate          # Windows
