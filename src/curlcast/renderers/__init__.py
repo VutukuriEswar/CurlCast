@@ -1,0 +1,70 @@
+"""Renderer registry.
+
+Built-ins are registered under ``hd`` and ``ascii``. Third-party renderers can
+plug in with :func:`register_renderer`::
+
+    from curlcast.renderers import BaseRenderer, register_renderer
+
+    class BrailleRenderer(BaseRenderer):
+        PIXEL_ASPECT = 1.0
+        def render(self, frame): ...
+
+    register_renderer("braille", BrailleRenderer)
+"""
+
+from __future__ import annotations
+
+from curlcast.renderers.ascii import AsciiRenderer
+from curlcast.renderers.base import BaseRenderer, RenderMode
+from curlcast.renderers.blocks import BlockRenderer
+
+__all__ = [
+    "AsciiRenderer",
+    "BaseRenderer",
+    "BlockRenderer",
+    "RenderMode",
+    "available_modes",
+    "get_renderer",
+    "register_renderer",
+]
+
+_REGISTRY: dict[str, type[BaseRenderer]] = {}
+
+
+def register_renderer(name: str, renderer: type[BaseRenderer]) -> None:
+    """Register (or replace) a renderer under a CLI-friendly ``name``."""
+    key = name.strip().lower()
+    if not key:
+        raise ValueError("renderer name must not be empty")
+    if not issubclass(renderer, BaseRenderer):
+        raise TypeError("renderer must subclass BaseRenderer")
+    _REGISTRY[key] = renderer
+
+
+def available_modes() -> list[str]:
+    """Names accepted by ``--mode``."""
+    return sorted(_REGISTRY)
+
+
+def get_renderer(
+    mode: str | RenderMode,
+    width: int = 0,
+    color: bool = True,
+    rows: int = 0,
+) -> BaseRenderer:
+    """Instantiate the renderer registered for ``mode``.
+
+    ``width``/``rows`` of ``0`` mean "fit the current terminal".
+    """
+    key = mode.value if isinstance(mode, RenderMode) else str(mode).strip().lower()
+    try:
+        renderer = _REGISTRY[key]
+    except KeyError:
+        raise ValueError(
+            f"unknown render mode {key!r}; available: {', '.join(available_modes())}"
+        ) from None
+    return renderer(width=width, color=color, rows=rows)
+
+
+register_renderer(RenderMode.HD.value, BlockRenderer)
+register_renderer(RenderMode.ASCII.value, AsciiRenderer)
