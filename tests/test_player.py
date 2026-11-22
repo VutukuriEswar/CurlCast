@@ -19,6 +19,9 @@ class FixedClock:
 
 
 class DummyRenderer:
+    cols = 80
+    rows = 24
+
     def render(self, frame: np.ndarray) -> str:
         return "FRAME"
 
@@ -26,6 +29,9 @@ class DummyRenderer:
 class RecordingScreen:
     def __init__(self) -> None:
         self.frames: list[str] = []
+
+    def write(self, text: str) -> None:
+        pass
 
     def draw(self, frame: str) -> None:
         self.frames.append(frame)
@@ -87,3 +93,33 @@ def test_screen_restores_cursor_and_resets_colour() -> None:
     assert "\x1b[HART\x1b[J" in text
     screen.close()
     assert buffer.getvalue().count("\x1b[?25h") == 1
+
+
+def test_screen_clear_emits_clear_and_home() -> None:
+    buffer = io.StringIO()
+    screen = Screen(buffer)
+    screen.clear()
+    assert "\x1b[2J\x1b[H" in buffer.getvalue()
+
+
+def test_render_loop_resizes_frame_when_dimensions_differ() -> None:
+    class SizingRenderer:
+        def __init__(self) -> None:
+            self.rendered_shapes: list[tuple[int, int]] = []
+
+        def fit(self, w: int, h: int, upscale: bool = False) -> tuple[int, int]:
+            return (40, 20)
+
+        def refresh_size(self, *args, **kwargs) -> bool:
+            return False
+
+        def render(self, frame: np.ndarray) -> str:
+            self.rendered_shapes.append(frame.shape[:2])
+            return "FRAME"
+
+    renderer = SizingRenderer()
+    screen = RecordingScreen()
+    frames = [(np.zeros((50, 100, 3), dtype=np.uint8), 0.0)]
+    render_loop(iter(frames), renderer, screen, FixedClock(0.0), fps=10, source_size=(100, 50))
+    assert len(renderer.rendered_shapes) == 1
+    assert renderer.rendered_shapes[0] == (20, 40)

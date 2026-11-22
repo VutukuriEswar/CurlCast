@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from curlcast.renderers.ascii import AsciiRenderer
 from curlcast.renderers.base import BaseRenderer, RenderMode
-from curlcast.renderers.blocks import BlockRenderer
 
 __all__ = [
     "AsciiRenderer",
     "BaseRenderer",
-    "BlockRenderer",
     "RenderMode",
     "available_modes",
     "get_renderer",
@@ -47,5 +45,4 @@ def get_renderer(
     return renderer(width=width, color=color, rows=rows)
 
 
-register_renderer(RenderMode.HD.value, BlockRenderer)
 register_renderer(RenderMode.ASCII.value, AsciiRenderer)

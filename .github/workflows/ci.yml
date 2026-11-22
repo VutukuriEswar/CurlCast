@@ -40,8 +40,6 @@ jobs:
         run: mypy src
 
       - name: Test
-        # Tests never open a real audio device: they use the muted/no-audio
-        # paths only, so they run on headless runners.
         run: pytest -q
 
       - name: Build

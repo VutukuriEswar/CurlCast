@@ -11,7 +11,7 @@ from rich.console import Console
 from curlcast import __version__
 from curlcast.demo import DemoAnimation, run_demo
 from curlcast.renderers import RenderMode, get_renderer
-from curlcast.terminal import configure_streams
+from curlcast.terminal import Screen, check_exit_key, configure_streams, get_size, is_tty
 
 _IMAGES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 _MEDIA = {".mp4", ".mov", ".webm", ".mkv", ".gif", ".avi", ".m4v"}
@@ -50,9 +50,9 @@ def _require_file(path: Path, allowed: set[str]) -> None:
         raise typer.Exit(code=1)
 
 
-def _renderer(mode: RenderMode, width: int, no_color: bool):
+def _renderer(mode: RenderMode, width: int, color: bool):
     try:
-        return get_renderer(mode, width=width, color=not no_color)
+        return get_renderer(mode, width=width, color=color)
     except ValueError as exc:
         err.print(f"[red]error[/] {exc}")
         raise typer.Exit(code=1) from exc
@@ -62,14 +62,17 @@ def _renderer(mode: RenderMode, width: int, no_color: bool):
 def view(
     image_path: Path = typer.Argument(..., metavar="IMAGE", help="Image file to render."),
     mode: RenderMode = typer.Option(
-        RenderMode.HD, "--mode", "-m", help="Render mode.", case_sensitive=False
+        RenderMode.ASCII, "--mode", "-m", help="Render mode.", case_sensitive=False
     ),
     width: int = typer.Option(
         0, "--width", "-w", min=0, help="Output width in columns (0 = fit terminal)."
     ),
-    no_color: bool = typer.Option(False, "--no-color", help="Monochrome output."),
+    color: bool = typer.Option(False, "--color", help="Enable color output (default: black & white)."),
     no_upscale: bool = typer.Option(
         False, "--no-upscale", help="Never enlarge images smaller than the terminal."
+    ),
+    once: bool = typer.Option(
+        False, "--once", "-1", help="Print once to stdout and exit without interactive viewer."
     ),
 ) -> None:
 
@@ -83,21 +86,41 @@ def view(
         err.print(f"[red]error[/] cannot read image: {exc}")
         raise typer.Exit(code=1) from exc
 
-    renderer = _renderer(mode, width, no_color)
-    art = renderer.render_image(image, upscale=not no_upscale)
+    if not is_tty() or once:
+        renderer = _renderer(mode, width, color)
+        art = renderer.render_image(image, upscale=not no_upscale)
+        try:
+            sys.stdout.write(art + "\n")
+            sys.stdout.flush()
+        except BrokenPipeError:
+            raise typer.Exit(code=0) from None
+        return
 
+    renderer = _renderer(mode, width, color)
+    screen = Screen()
     try:
-        sys.stdout.write(art + "\n")
-        sys.stdout.flush()
-    except BrokenPipeError:
-        raise typer.Exit(code=0) from None
+        with screen:
+            last_size = (0, 0)
+            while True:
+                size = get_size()
+                curr_size = (size.columns, size.rows)
+                if curr_size != last_size:
+                    last_size = curr_size
+                    renderer.refresh_size()
+                    art = renderer.render_image(image, upscale=not no_upscale)
+                    screen.draw(art)
+
+                if check_exit_key(timeout=0.08):
+                    break
+    except KeyboardInterrupt:
+        pass
 
 
 @app.command()
 def play(
     media_path: Path = typer.Argument(..., metavar="MEDIA", help="Video or GIF to play."),
     mode: RenderMode = typer.Option(
-        RenderMode.HD, "--mode", "-m", help="Render mode.", case_sensitive=False
+        RenderMode.ASCII, "--mode", "-m", help="Render mode.", case_sensitive=False
     ),
     width: int = typer.Option(
         0, "--width", "-w", min=0, help="Output width in columns (0 = fit terminal)."
@@ -107,11 +130,11 @@ def play(
     ),
     loop: bool = typer.Option(False, "--loop", "-l", help="Loop until interrupted."),
     no_audio: bool = typer.Option(False, "--no-audio", help="Disable audio playback."),
-    no_color: bool = typer.Option(False, "--no-color", help="Monochrome output."),
+    color: bool = typer.Option(False, "--color", help="Enable color output (default: black & white)."),
 ) -> None:
     _require_file(media_path, _MEDIA)
 
-    renderer = _renderer(mode, width, no_color)
+    renderer = _renderer(mode, width, color)
 
     from curlcast.ffmpeg import MediaError
     from curlcast.player import play as play_media
@@ -128,7 +151,7 @@ def play(
 @app.command()
 def demo(
     mode: RenderMode = typer.Option(
-        RenderMode.HD, "--mode", "-m", help="Render mode.", case_sensitive=False
+        RenderMode.ASCII, "--mode", "-m", help="Render mode.", case_sensitive=False
     ),
     width: int = typer.Option(
         0, "--width", "-w", min=0, help="Output width in columns (0 = fit terminal)."
@@ -140,10 +163,10 @@ def demo(
     animation: DemoAnimation = typer.Option(
         DemoAnimation.PLASMA, "--animation", "-a", help="Animation to display."
     ),
-    no_color: bool = typer.Option(False, "--no-color", help="Monochrome output."),
+    color: bool = typer.Option(False, "--color", help="Enable color output (default: black & white)."),
 ) -> None:
 
-    renderer = _renderer(mode, width, no_color)
+    renderer = _renderer(mode, width, color)
     with contextlib.suppress(KeyboardInterrupt):
         run_demo(renderer, duration=duration, fps=fps, animation=animation)
 

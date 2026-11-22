@@ -10,7 +10,6 @@ from curlcast.terminal import get_size
 
 
 class RenderMode(str, Enum):
-    HD = "hd"
     ASCII = "ascii"
 
 
@@ -18,10 +17,25 @@ class BaseRenderer(ABC):
     PIXEL_ASPECT: float = 2.0
 
     def __init__(self, width: int = 0, color: bool = True, rows: int = 0) -> None:
+        self._user_width = width
         size = get_size()
         self.cols: int = width if width > 0 else max(size.columns - 1, 10)
         self.rows: int = rows if rows > 0 else max(size.rows - 1, 4)
         self.color: bool = color
+
+    def refresh_size(self, max_cols: int = 0, max_rows: int = 0) -> bool:
+        size = get_size()
+        new_cols = self._user_width if self._user_width > 0 else max(size.columns - 1, 10)
+        new_rows = max(size.rows - 1, 4)
+        if max_cols > 0:
+            new_cols = min(new_cols, max_cols)
+        if max_rows > 0:
+            new_rows = min(new_rows, max_rows)
+        if new_cols != self.cols or new_rows != self.rows:
+            self.cols = new_cols
+            self.rows = new_rows
+            return True
+        return False
 
     @property
     def target_cols(self) -> int:
@@ -31,23 +45,29 @@ class BaseRenderer(ABC):
     def target_rows(self) -> int:
         return self.rows
 
+    def cell_aspect(self) -> float:
+        ratio = self.cols / max(1, self.rows)
+        if self.rows > 120 and ratio < 1.6:
+            return max(0.5, min(self.PIXEL_ASPECT, ratio / (16.0 / 9.0)))
+        return self.PIXEL_ASPECT
+
     def fit(self, src_w: int, src_h: int, *, upscale: bool = False) -> tuple[int, int]:
         max_w = max(1, self.cols)
-        max_h = max(1, int(self.rows * self.PIXEL_ASPECT))
+        max_h = max(1, self.rows)
         if src_w <= 0 or src_h <= 0:
             return max_w, max_h
 
-        scale = min(max_w / src_w, max_h / src_h)
+        aspect = self.cell_aspect()
+        scale = min(max_w / src_w, (max_h * aspect) / src_h)
         if not upscale:
             scale = min(scale, 1.0)
 
         width = max(1, min(max_w, int(round(src_w * scale))))
-        height = max(1, min(max_h, int(round(src_h * scale))))
+        height = max(1, min(max_h, int(round(src_h * scale / aspect))))
         return width, height
 
     def pixel_dimensions(self) -> tuple[int, int]:
-        height = max(1, int(round(self.rows * self.PIXEL_ASPECT)))
-        return self.cols, height
+        return self.cols, self.rows
 
     def resize_image(self, image: Image.Image, *, upscale: bool = False) -> Image.Image:
         rgb = image.convert("RGB")

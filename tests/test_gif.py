@@ -26,7 +26,7 @@ def make_gif(path: Path, sizes: tuple[int, int] = (24, 16)) -> Path:
 
 def test_gif_frames_are_sized_and_timestamped(tmp_path: Path) -> None:
     path = make_gif(tmp_path / "anim.gif")
-    renderer = get_renderer("hd", width=10, rows=6)
+    renderer = get_renderer("ascii", width=10, rows=6)
     source = GifSource(path, renderer)
     frames = list(source.frames())
 
@@ -45,7 +45,7 @@ def test_gif_with_broken_durations_is_clamped(tmp_path: Path) -> None:
     frames = [Image.new("RGB", (16, 16), (index * 40, 0, 0)) for index in range(2)]
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=[0, 0], loop=0)
 
-    values = [ts for _, ts in GifSource(path, get_renderer("hd", width=8, rows=4)).frames()]
+    values = [ts for _, ts in GifSource(path, get_renderer("ascii", width=8, rows=4)).frames()]
     assert values[0] == 0.0
     assert values[1] == pytest.approx(0.08)
 

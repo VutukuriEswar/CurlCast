@@ -25,7 +25,7 @@ def test_public_api_is_importable() -> None:
     from curlcast import audio, cli, demo, ffmpeg, player, renderers, terminal
 
     assert callable(cli.main)
-    assert renderers.available_modes() == ["ascii", "hd"]
+    assert renderers.available_modes() == ["ascii"]
     assert hasattr(audio, "AudioManager")
     assert hasattr(player, "play")
     assert hasattr(demo, "run_demo")

@@ -4,6 +4,7 @@ import contextlib
 import os
 import shutil
 import sys
+import time
 from dataclasses import dataclass
 from types import TracebackType
 from typing import TextIO
@@ -78,6 +79,10 @@ class Screen:
         return self._stream if self._stream is not None else sys.stdout
 
     def __enter__(self) -> Screen:
+        if os.name == "nt":
+            with contextlib.suppress(Exception):
+                import ctypes
+                ctypes.windll.winmm.timeBeginPeriod(1)
         opening = HIDE_CURSOR
         if self._clear_on_enter:
             opening += CLEAR_SCREEN
@@ -97,12 +102,51 @@ class Screen:
         stream.write(text)
         stream.flush()
 
+    def clear(self) -> None:
+        self.write(CLEAR_SCREEN + CURSOR_HOME)
+
     def draw(self, frame: str) -> None:
-        self.write(CURSOR_HOME + frame + ERASE_BELOW)
+        if "\n" in frame:
+            body = "\x1b[K\n".join(frame.split("\n")) + "\x1b[K"
+        else:
+            body = frame
+        self.write(CURSOR_HOME + body + ERASE_BELOW)
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
+        if os.name == "nt":
+            with contextlib.suppress(Exception):
+                import ctypes
+                ctypes.windll.winmm.timeEndPeriod(1)
         with contextlib.suppress(BrokenPipeError, ValueError):
             self.write(RESET + SHOW_CURSOR + "\n")
+
+
+def check_exit_key(timeout: float = 0.0) -> bool:
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            end_time = time.perf_counter() + max(0.0, timeout)
+            while True:
+                if msvcrt.kbhit():
+                    ch = msvcrt.getch()
+                    if ch in (b"q", b"Q", b"\x1b", b"\r", b"\n", b" ", b"\x03"):
+                        return True
+                if time.perf_counter() >= end_time:
+                    break
+                time.sleep(0.01)
+            return False
+        else:
+            import select
+
+            r, _, _ = select.select([sys.stdin], [], [], max(0.0, timeout))
+            if r:
+                ch = sys.stdin.read(1)
+                if ch in ("q", "Q", "\x1b", "\r", "\n", " ", "\x03"):
+                    return True
+            return False
+    except Exception:
+        return False

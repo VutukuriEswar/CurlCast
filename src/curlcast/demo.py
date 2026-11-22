@@ -133,4 +133,11 @@ def run_demo(
     screen = Screen()
     clock = PerfClock()
     with screen:
-        render_loop(source.frames(), renderer, screen, clock, source.fps)
+        render_loop(
+            source.frames(),
+            renderer,
+            screen,
+            clock,
+            source.fps,
+            source_size=(source.width, source.height),
+        )

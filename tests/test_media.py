@@ -93,7 +93,7 @@ def test_probe_real_clip(tiny_clip: Path) -> None:
 
 
 def test_ffmpeg_source_scales_and_counts_frames(tiny_clip: Path) -> None:
-    renderer = get_renderer("hd", width=32, rows=10)
+    renderer = get_renderer("ascii", width=32, rows=10)
     info = probe_media(tiny_clip)
     source = FFmpegSource(tiny_clip, renderer, info, fps=10)
     frames = list(source.frames())
@@ -111,4 +111,4 @@ def test_missing_file_is_reported(tmp_path: Path) -> None:
     with pytest.raises(MediaError, match="file not found"):
         from curlcast.player import play
 
-        play(tmp_path / "nope.mp4", get_renderer("hd", width=20))
+        play(tmp_path / "nope.mp4", get_renderer("ascii", width=20))

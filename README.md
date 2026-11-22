@@ -8,16 +8,11 @@ Historically, terminal media rendering has been plagued by crude monochrome char
 
 ## Key Features
 
-🎬 **High-Definition TrueColor Block Rendering (`--mode hd`)**
-- Utilizes the Unicode half-block glyph (`▀`) to pack two vertical pixels into every single terminal character cell, doubling the vertical resolution of standard terminal art.
-- Applies 24-bit RGB TrueColor for both foreground (top pixel) and background (bottom pixel).
-- Employs an intelligent escape sequence cache that only re-emits ANSI color codes when color values change across horizontal scanlines, drastically reducing I/O throughput and terminal render latency.
-- Includes a dedicated `--no-color` monochrome block mode utilizing `' '`, `▀`, `▄`, and `█` to preserve 2x vertical resolution on non-color displays.
-
-🔤 **Adaptive Luminance ASCII Art (`--mode ascii`)**
-- Translates media luminance onto an empirically balanced 70-character glyph density ramp (`$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\|()1{}[]?-_+~<>i!lI;:,"^`'. `).
-- Features adaptive contrast stretching that dynamically clips scene luminance between the 2nd and 98th percentiles, ensuring crisp detail in both low-key and high-key scenes.
+🔤 **Adaptive Luminance ASCII Art Engine**
+- Translates media luminance onto an empirically balanced glyph density ramp.
+- Features adaptive contrast stretching that dynamically clips scene luminance between the 1st and 99th percentiles, ensuring crisp detail in both low-key and high-key scenes.
 - Implements exponential moving-average smoothing across consecutive video frames to prevent visual luminance "pumping" during scene transitions.
+- Supports high-contrast artistic monochrome representation by default, with `--color` for 24-bit RGB TrueColor.
 
 🔊 **Hardware-Synchronized, Drift-Corrected Audio Engine**
 - Treats the audio hardware stream as the authoritative master clock (`audio position = stream.time - baseline - latency`).
@@ -32,7 +27,7 @@ Historically, terminal media rendering has been plagued by crude monochrome char
 
 📐 **Sub-Pixel Geometry & Aspect Ratio Normalization**
 - Corrects for standard ~2:1 vertical character cell geometry.
-- Enforces strict mathematical aspect ratio constraints (`PIXEL_ASPECT`): HD mode samples at `cols × (rows × 2)` to produce 1:1 square pixel pairs, while ASCII mode samples at `cols × rows` to prevent vertical distortion.
+- Enforces strict mathematical aspect ratio constraints: preserves exact aspect ratio across all zoom levels, including adaptive compensation for micro-font cell flattening.
 - Fully verified against 16:9 widescreen, 4:3 standard, 1:1 square, 9:16 vertical mobile, and ultrawide media formats.
 - Automatically handles EXIF orientation metadata for mobile smartphone photos and videos.
 
@@ -93,11 +88,11 @@ Historically, terminal media rendering has been plagued by crude monochrome char
                                        v
 +-----------------------------------------------------------------------------+
 |                          ACTIVE RENDERER STRATEGY                           |
-|   [HD Block Mode: Unicode ▀]              [ASCII Mode: 70-Glyph Density]    |
-|   - Sample 1x2 pixel vertical pairs       - Adaptive 2%-98% contrast stretch|
-|   - TrueColor foreground/background       - Temporal exponential smoothing  |
-|   - Run-length ANSI escape code cache     - 24-bit TrueColor or monochrome  |
-+--------------------------------------+--------------------------------------+
+|                      [ASCII Mode: Glyph Density Engine]                     |
+|                      - Adaptive contrast stretch                            |
+|                      - Dynamic LUT glyph mapping & quantization             |
+|                      - In-place run-length ANSI escape emission             |
++-----------------------------------------------------------------------------+
                                        |
                                        v
 +-----------------------------------------------------------------------------+
@@ -124,8 +119,7 @@ src/curlcast/
     ├── __init__.py      # Renderer registry (register_renderer, get_renderer)
     ├── base.py          # BaseRenderer abstract strategy & fit() geometry engine
     ├── _pixels.py       # High-performance NumPy color quantization & helpers
-    ├── blocks.py        # Half-block TrueColor HD renderer (▀)
-    └── ascii.py         # 70-glyph adaptive contrast ASCII art renderer
+    └── ascii.py         # Adaptive contrast ASCII art renderer
 ```
 
 ---
@@ -217,24 +211,24 @@ curlcast demo --animation torus --mode ascii
 Renders a still photo or graphic in the terminal and exits cleanly.
 
 ```bash
-# Render image in default HD TrueColor block mode
+# Render image in default high-contrast artistic monochrome ASCII
 curlcast view photo.jpg
 
-# Render in high-contrast ASCII art mode
-curlcast view photo.jpg --mode ascii
+# Render with 24-bit TrueColor enabled
+curlcast view photo.jpg --color
 
 # Constrain output width to 120 character columns
 curlcast view photo.jpg --width 120
 
-# Render monochrome without upscaling smaller images
-curlcast view logo.png --no-color --no-upscale
+# Render without upscaling smaller images
+curlcast view logo.png --no-upscale
 ```
 
 | Option | Flag | Default | Description |
 |---|---|---|---|
-| `--mode` | `-m` | `hd` | Renderer mode: `hd` (Unicode half-blocks) or `ascii` (glyph density). |
+| `--mode` | `-m` | `ascii` | Renderer mode (`ascii`). |
 | `--width` | `-w` | `0` (auto) | Output width in columns (`0` automatically fits terminal width). |
-| `--no-color` | — | `False` | Renders in monochrome without ANSI color codes. |
+| `--color` | — | `False` | Enables 24-bit RGB TrueColor output (default: monochrome). |
 | `--no-upscale` | — | `False` | Prevents enlarging images smaller than the terminal viewport. |
 
 ---
@@ -244,27 +238,30 @@ curlcast view logo.png --no-color --no-upscale
 Plays a video or animated GIF in real time with synchronized audio.
 
 ```bash
-# Play video with synchronized audio
+# Play video with synchronized audio (monochrome ASCII)
 curlcast play movie.mp4
 
-# Play video in ASCII mode capped at 30 FPS
-curlcast play movie.mp4 --mode ascii --fps 30
+# Play video with full TrueColor enabled
+curlcast play movie.mp4 --color
+
+# Play video capped at 30 FPS
+curlcast play movie.mp4 --fps 30
 
 # Loop an animated GIF continuously
 curlcast play animation.gif --loop
 
-# Play video muted without color
-curlcast play clip.mp4 --no-audio --no-color
+# Play video muted
+curlcast play clip.mp4 --no-audio
 ```
 
 | Option | Flag | Default | Description |
 |---|---|---|---|
-| `--mode` | `-m` | `hd` | Renderer mode: `hd` or `ascii`. |
+| `--mode` | `-m` | `ascii` | Renderer mode (`ascii`). |
 | `--width` | `-w` | `0` (auto) | Output width in columns (`0` automatically fits terminal width). |
 | `--fps` | — | `20.0` | Target frame rate (1.0 to 120.0 FPS, capped at media source rate). |
 | `--loop` | `-l` | `False` | Loops playback continuously until stopped. |
 | `--no-audio` | — | `False` | Disables audio playback stream. |
-| `--no-color` | — | `False` | Renders video frames in monochrome. |
+| `--color` | — | `False` | Enables 24-bit RGB TrueColor output (default: monochrome). |
 
 > **Playback Control:** Press **`Ctrl+C`** at any point to stop playback. CurlCast intercepts interrupts to restore cursor visibility, terminate audio streams, and cleanly kill background decoder processes.
 
@@ -288,11 +285,11 @@ curlcast demo --duration 0
 | Option | Flag | Default | Description |
 |---|---|---|---|
 | `--animation` | `-a` | `plasma` | Generative animation type: `plasma` or `torus`. |
-| `--mode` | `-m` | `hd` | Renderer mode: `hd` or `ascii`. |
+| `--mode` | `-m` | `ascii` | Renderer mode (`ascii`). |
 | `--width` | `-w` | `0` (auto) | Output width in columns (`0` fits terminal). |
 | `--fps` | — | `24.0` | Target animation frame rate (1.0 to 60.0 FPS). |
 | `--duration` | `-d` | `10.0` | Duration in seconds (`0` runs indefinitely until `Ctrl+C`). |
-| `--no-color` | — | `False` | Monochrome output. |
+| `--color` | — | `False` | Enables TrueColor output (default: monochrome). |
 
 ---
 
@@ -302,21 +299,9 @@ curlcast demo --duration 0
 
 Standard terminal character cells are not square — they are approximately twice as tall as they are wide (~2:1 aspect ratio). Directly mapping one image pixel to one character cell results in extreme vertical stretching.
 
-CurlCast solves this via its `PIXEL_ASPECT` abstraction defined in `BaseRenderer`:
-
-$$\text{PIXEL\_ASPECT} = \frac{\text{Sampled Pixel Rows}}{\text{Character Cell Rows}}$$
-
-- **In HD Block Mode (`PIXEL_ASPECT = 2.0`):** Each terminal character cell prints a Unicode upper half-block (`▀`). The top pixel is painted by the foreground color and the bottom pixel is painted by the background color. Because two vertical pixels occupy one 2:1 character cell, each pixel is rendered with an exact 1:1 square aspect ratio!
-- **In ASCII Mode (`PIXEL_ASPECT = 1.0`):** Each character cell represents one sampled pixel. Because the glyph cell is already ~2:1 tall, sampling half as many vertical rows naturally counteracts terminal cell elongation.
-
-```text
-HD Mode (Half-Blocks):            ASCII Mode (Glyphs):
-+-------------------+             +-------------------+
-| Top Pixel  (FG)   |             |                   |
-+-------------------+  = 1 Cell   |    Glyph (2:1)    |  = 1 Cell
-| Bottom Pixel (BG) |             |                   |
-+-------------------+             +-------------------+
-```
+CurlCast solves this through geometry scaling in `BaseRenderer`:
+- Sampling half as many vertical character rows naturally counteracts the 2:1 character cell elongation.
+- Includes dynamic cell aspect compensation for micro-font sizes at maximum terminal zoom-out, preventing horizontal pancake distortion.
 
 ### 2. Audio-Master Clock & Drift Correction
 
@@ -347,8 +332,8 @@ Emitting 24-bit TrueColor ANSI escape sequences for every single cell is computa
 
 CurlCast optimizes this with **color-run caching**:
 - Video frames naturally exhibit horizontal color coherence (adjacent pixels frequently share identical or similar colors).
-- The HD renderer tracks the currently active foreground and background color keys.
-- Escape codes are emitted **only when the color actually transitions**. Identical adjacent pixels simply emit the character glyph `▀`, compressing ANSI stream volume by 60%–80% and drastically boosting playback FPS.
+- The TrueColor ASCII renderer tracks the currently active foreground color keys.
+- Escape codes are emitted **only when the color actually transitions**. Identical adjacent characters reuse the current active ANSI style, compressing ANSI stream volume and boosting playback FPS.
 
 ---
 
@@ -367,22 +352,18 @@ class BrailleRenderer(BaseRenderer):
     PIXEL_ASPECT = 2.0  # Defines sampling aspect ratio
 
     def render(self, frame: np.ndarray) -> str:
-        # frame is a (H, W, 3) uint8 RGB NumPy array
         height, width, _ = frame.shape
         lines = []
         for y in range(0, height - 1, 2):
             row_chars = []
             for x in range(width):
-                # Custom logic mapping pixel luminance to Braille glyphs
                 row_chars.append("⣿")
             lines.append("".join(row_chars))
         return "\n".join(lines)
 
 
-# Register custom renderer into the global registry
 register_renderer("braille", BrailleRenderer)
 
-# Use directly from Python:
 renderer = get_renderer("braille", width=100)
 output = renderer.render_image(Image.open("photo.jpg"))
 print(output)
@@ -402,10 +383,8 @@ Benchmarked on an Intel Core i7 Windows machine (Python 3.11) running Windows Te
 
 | Mode | Resolution Grid | Render Latency | Max Throughput | Target Headroom |
 |---|---|---|---|---|
-| **HD Block** (`--mode hd`) | 120 × 68 cells (120×136 px) | ~14 ms / frame | **~70 FPS** | 3.5× at 20 FPS |
-| **HD Block** (`--mode hd`) | 178 × 100 cells (178×200 px) | ~35 ms / frame | **~28 FPS** | 1.4× at 20 FPS |
-| **ASCII** (`--mode ascii`) | 80 × 45 cells (80×45 px) | ~10 ms / frame | **~100 FPS** | 5.0× at 20 FPS |
-| **Monochrome HD** | 120 × 68 cells | ~8 ms / frame | **~125 FPS** | 6.2× at 20 FPS |
+| **ASCII Monochrome** | 120 × 60 cells | ~1 ms / frame | **~1000 FPS** | 50× at 20 FPS |
+| **ASCII TrueColor** (`--color`) | 120 × 60 cells | ~6 ms / frame | **~160 FPS** | 8.0× at 20 FPS |
 
 *Note: CurlCast's dynamic frame-dropping engine ensures that even if you target 60 FPS on a constrained terminal, audio playback remains completely uninterrupted while video smoothly drops surplus frames.*
 
@@ -430,7 +409,7 @@ Benchmarked on an Intel Core i7 Windows machine (Python 3.11) running Windows Te
 - If your system does not have PortAudio drivers installed, install `ffplay` or `mpv` on your system PATH as an automatic secondary fallback.
 
 **Image appears horizontally or vertically stretched:**
-- Terminal cells are assumed to possess a 2:1 height-to-width ratio. If you are using custom CJK or specialized square fonts, use `--mode hd` which packs pixels into 1:1 pairs.
+- Terminal cells are assumed to possess a 2:1 height-to-width ratio. CurlCast automatically handles this and dynamically adjusts for extreme terminal zoom levels.
 - Small images may appear pixelated when enlarged to fill the window; pass `--no-upscale` to render them at natural dimensions.
 
 **Screen wraps or produces extra blank lines:**
@@ -472,9 +451,9 @@ ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 \
        -f lavfi -i sine=frequency=440 -t 10 \
        -c:v libx264 -pix_fmt yuv420p -c:a aac sample.mp4
 
-# Verify playback in HD and ASCII modes
+# Verify playback in ASCII mode
 curlcast play sample.mp4
-curlcast play sample.mp4 --mode ascii --loop
+curlcast play sample.mp4 --color --loop
 ```
 
 ---

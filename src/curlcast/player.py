@@ -16,7 +16,7 @@ from PIL import Image
 from curlcast.audio import AudioManager
 from curlcast.ffmpeg import MediaError, MediaInfo, ffmpeg_exe, probe_media
 from curlcast.renderers.base import BaseRenderer
-from curlcast.terminal import Screen
+from curlcast.terminal import Screen, check_exit_key, get_size
 
 __all__ = [
     "FFmpegSource",
@@ -81,12 +81,13 @@ class FFmpegSource:
         info: MediaInfo,
         fps: float,
         *,
-        max_queue: int = 3,
+        max_queue: int = 16,
     ) -> None:
         width = info.width
         height = info.height
         source_fps = info.fps or fps
         self._path = Path(path)
+        self.source_size = (int(width), int(height))
         self._width, self._height = renderer.fit(int(width), int(height))
         self.fps = max(0.5, min(float(fps), float(source_fps)))
         self._max_queue = max(1, max_queue)
@@ -108,7 +109,6 @@ class FFmpegSource:
             "-loglevel",
             "error",
             "-nostdin",
-            "-re",
             "-i",
             str(self._path),
             "-an",
@@ -198,6 +198,7 @@ class GifSource:
     def __init__(self, path: Path, renderer: BaseRenderer) -> None:
         self._path = Path(path)
         self._renderer = renderer
+        self.source_size: tuple[int, int] | None = None
         self._target: tuple[int, int] | None = None
 
     def frames(self) -> Iterator[Frame]:
@@ -214,6 +215,8 @@ class GifSource:
                 delay = min(max(delay, 0.02), 10.0)
 
                 frame = image.convert("RGB")
+                if self.source_size is None:
+                    self.source_size = frame.size
                 if self._target is None:
                     self._target = self._renderer.fit(*frame.size)
                 if frame.size != self._target:
@@ -234,16 +237,41 @@ def render_loop(
     screen: Screen,
     clock: Clock,
     fps: float,
+    *,
+    source_size: tuple[int, int] | None = None,
 ) -> None:
 
     interval = 1.0 / max(fps, 1e-6)
+    last_size = (0, 0)
     for frame, timestamp in frames:
-        if timestamp - clock.position() < -2.0 * interval:
+        if timestamp - clock.position() < -0.30:
             continue
+        if check_exit_key(0.0):
+            break
+
+        term = get_size()
+        curr_size = (term.columns, term.rows)
+        if curr_size != last_size:
+            last_size = curr_size
+            if hasattr(renderer, "refresh_size"):
+                renderer.refresh_size()
+
+        effective_source = source_size if source_size is not None else (frame.shape[1], frame.shape[0])
+        fit_fn = getattr(renderer, "fit", None)
+        if fit_fn is not None and source_size is not None:
+            target_w, target_h = fit_fn(effective_source[0], effective_source[1], upscale=True)
+            if (frame.shape[1], frame.shape[0]) != (target_w, target_h):
+                pil_frame = Image.fromarray(frame).resize(
+                    (target_w, target_h), Image.Resampling.BILINEAR
+                )
+                frame = np.asarray(pil_frame)
+
         text = renderer.render(frame)
         wait = timestamp - clock.position()
-        if wait > 0:
-            time.sleep(wait)
+        if wait > 0.002:
+            time.sleep(wait - 0.0015)
+        while timestamp - clock.position() > 0:
+            pass
         screen.draw(text)
 
 
@@ -263,7 +291,8 @@ def _play_once(
 
     audio.start()
     try:
-        render_loop(chain((first,), frames), renderer, screen, audio, source.fps)
+        source_size = getattr(source, "source_size", None)
+        render_loop(chain((first,), frames), renderer, screen, audio, source.fps, source_size=source_size)
     finally:
         source.close()
         audio.stop()
@@ -301,6 +330,7 @@ def play(
         screen = Screen()
         with screen:
             while True:
+                renderer.refresh_size()
                 _play_once(make_source(), renderer, screen, audio)
                 if not loop:
                     break

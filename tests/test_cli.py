@@ -30,11 +30,11 @@ def test_view_renders_without_escape_codes(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["view", str(path), "--width", "20", "--no-color", "--no-upscale"],
+        ["view", str(path), "--width", "20", "--no-upscale"],
     )
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    assert 1 <= len(lines) <= 8
+    assert 1 <= len(lines) <= 20
     assert all(len(line) <= 20 for line in lines)
     assert "\x1b[" not in result.output
 
@@ -52,9 +52,18 @@ def test_view_colour_output_contains_truecolor(tmp_path: Path) -> None:
     path = tmp_path / "pic.png"
     gradient_image(40, 30).save(path)
 
-    result = runner.invoke(app, ["view", str(path), "--width", "10"])
+    result = runner.invoke(app, ["view", str(path), "--width", "10", "--color"])
     assert result.exit_code == 0, result.output
     assert "\x1b[38;2;" in result.output
+
+
+def test_view_once_flag(tmp_path: Path) -> None:
+    path = tmp_path / "pic.png"
+    gradient_image(40, 30).save(path)
+
+    result = runner.invoke(app, ["view", str(path), "--once", "--width", "10"])
+    assert result.exit_code == 0, result.output
+    assert len(result.output.splitlines()) > 0
 
 
 def test_view_rejects_missing_file(tmp_path: Path) -> None:
@@ -87,12 +96,11 @@ def test_play_rejects_invalid_fps(tmp_path: Path) -> None:
 def test_demo_runs_and_restores_the_cursor() -> None:
     result = runner.invoke(
         app,
-        ["demo", "--duration", "0.15", "--width", "24", "--fps", "30", "--no-color"],
+        ["demo", "--duration", "0.15", "--width", "24", "--fps", "30", "--mode", "ascii"],
     )
     assert result.exit_code == 0, result.output
     assert "\x1b[?25l" in result.output
     assert result.output.rstrip().endswith("\x1b[?25h")
-    assert "▀" in result.output
 
 
 def test_play_gif_end_to_end(tmp_path: Path) -> None:
@@ -101,7 +109,7 @@ def test_play_gif_end_to_end(tmp_path: Path) -> None:
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=[50, 50], loop=0)
 
     result = runner.invoke(
-        app, ["play", str(path), "--no-audio", "--width", "16", "--no-color"]
+        app, ["play", str(path), "--no-audio", "--width", "16"]
     )
     assert result.exit_code == 0, result.output
     assert "\x1b[?25l" in result.output

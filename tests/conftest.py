@@ -14,7 +14,6 @@ def strip_ansi(text: str) -> str:
 
 
 def gradient_image(width: int = 160, height: int = 120) -> Image.Image:
-    """A deterministic RGB image with smooth horizontal and vertical ramps."""
     x = np.linspace(0, 255, width, dtype=np.uint8)
     y = np.linspace(0, 255, height, dtype=np.uint8)
     red, _ = np.meshgrid(x, y)
