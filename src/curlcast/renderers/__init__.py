@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from curlcast.renderers.ascii import AsciiRenderer
 from curlcast.renderers.base import BaseRenderer, RenderMode
+from curlcast.renderers.effects import DitherMode, ShaderMode
 
 __all__ = [
     "AsciiRenderer",
     "BaseRenderer",
+    "DitherMode",
     "RenderMode",
+    "ShaderMode",
     "available_modes",
     "get_renderer",
     "register_renderer",
@@ -29,10 +34,14 @@ def available_modes() -> list[str]:
 
 
 def get_renderer(
-    mode: str | RenderMode,
+    mode: str | RenderMode = "ascii",
     width: int = 0,
     color: bool = True,
     rows: int = 0,
+    shader: ShaderMode | str = ShaderMode.NONE,
+    dither: DitherMode | str = DitherMode.NONE,
+    anaglyph: bool = False,
+    text: str | None = None,
 ) -> BaseRenderer:
 
     key = mode.value if isinstance(mode, RenderMode) else str(mode).strip().lower()
@@ -42,7 +51,22 @@ def get_renderer(
         raise ValueError(
             f"unknown render mode {key!r}; available: {', '.join(available_modes())}"
         ) from None
-    return renderer(width=width, color=color, rows=rows)
+    factory: Any = renderer
+    try:
+        return cast(
+            BaseRenderer,
+            factory(
+                width=width,
+                color=color,
+                rows=rows,
+                shader=shader,
+                dither=dither,
+                anaglyph=anaglyph,
+                text=text,
+            ),
+        )
+    except TypeError:
+        return cast(BaseRenderer, factory(width=width, color=color, rows=rows))
 
 
 register_renderer(RenderMode.ASCII.value, AsciiRenderer)

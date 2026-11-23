@@ -18,6 +18,7 @@ class BaseRenderer(ABC):
 
     def __init__(self, width: int = 0, color: bool = True, rows: int = 0) -> None:
         self._user_width = width
+        self._user_rows = rows
         size = get_size()
         self.cols: int = width if width > 0 else max(size.columns - 1, 10)
         self.rows: int = rows if rows > 0 else max(size.rows - 1, 4)
@@ -26,7 +27,7 @@ class BaseRenderer(ABC):
     def refresh_size(self, max_cols: int = 0, max_rows: int = 0) -> bool:
         size = get_size()
         new_cols = self._user_width if self._user_width > 0 else max(size.columns - 1, 10)
-        new_rows = max(size.rows - 1, 4)
+        new_rows = self._user_rows if self._user_rows > 0 else max(size.rows - 1, 4)
         if max_cols > 0:
             new_cols = min(new_cols, max_cols)
         if max_rows > 0:

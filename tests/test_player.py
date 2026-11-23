@@ -89,7 +89,7 @@ def test_screen_restores_cursor_and_resets_colour() -> None:
         screen.draw("ART")
     text = buffer.getvalue()
     assert text.startswith("\x1b[?25l")
-    assert text.endswith("\x1b[0m\x1b[?25h\n")
+    assert text.endswith("\x1b[0m\x1b[?25h\x1b[?7h\n")
     assert "\x1b[HART\x1b[J" in text
     screen.close()
     assert buffer.getvalue().count("\x1b[?25h") == 1

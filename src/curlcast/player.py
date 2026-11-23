@@ -15,8 +15,11 @@ from PIL import Image
 
 from curlcast.audio import AudioManager
 from curlcast.ffmpeg import MediaError, MediaInfo, ffmpeg_exe, probe_media
+from curlcast.lyrics import LyricEngine
 from curlcast.renderers.base import BaseRenderer
-from curlcast.terminal import Screen, check_exit_key, get_size
+from curlcast.renderers.normal import Flashlight
+from curlcast.server import StreamServer
+from curlcast.terminal import Screen, get_size, poll_input
 
 __all__ = [
     "FFmpegSource",
@@ -64,12 +67,15 @@ def available_audio_backends() -> list[str]:
 
 def _read_exact(stream: IO[bytes], size: int) -> bytes | None:
     buffer = bytearray()
-    while len(buffer) < size:
-        chunk = stream.read(size - len(buffer))
-        if not chunk:
-            return None
-        buffer.extend(chunk)
-    return bytes(buffer)
+    try:
+        while len(buffer) < size:
+            chunk = stream.read(size - len(buffer))
+            if not chunk:
+                return None
+            buffer.extend(chunk)
+        return bytes(buffer)
+    except (ValueError, OSError, BrokenPipeError):
+        return None
 
 
 class FFmpegSource:
@@ -144,6 +150,8 @@ class FFmpegSource:
                         break
                     frame = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 3)
                     _put(frames, frame, stop)
+            except (ValueError, OSError, BrokenPipeError):
+                pass
             finally:
                 _put(frames, None, stop)
 
@@ -165,18 +173,18 @@ class FFmpegSource:
     def close(self) -> None:
         self._stop.set()
         proc, self._proc = self._proc, None
+        thread, self._thread = self._thread, None
         if proc is not None:
             with contextlib.suppress(OSError):
                 proc.kill()
             stdout = proc.stdout
             if stdout is not None:
-                with contextlib.suppress(OSError):
+                with contextlib.suppress(OSError, ValueError):
                     stdout.close()
             with contextlib.suppress(Exception):
-                proc.wait(timeout=1.0)
-        thread, self._thread = self._thread, None
+                proc.wait(timeout=0.2)
         if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=1.0)
+            thread.join(timeout=0.2)
 
 
 def _put(
@@ -239,15 +247,33 @@ def render_loop(
     fps: float,
     *,
     source_size: tuple[int, int] | None = None,
+    audio: AudioManager | None = None,
+    lyrics: LyricEngine | None = None,
+    flashlight: Flashlight | None = None,
+    server: StreamServer | None = None,
+    live: bool = False,
 ) -> None:
 
-    interval = 1.0 / max(fps, 1e-6)
     last_size = (0, 0)
     for frame, timestamp in frames:
-        if timestamp - clock.position() < -0.30:
+        if not live and (timestamp - clock.position() < -0.30):
             continue
-        if check_exit_key(0.0):
+        key = poll_input(0.0)
+        if key == "EXIT":
             break
+        elif flashlight is not None and key is not None:
+            if key == "UP":
+                flashlight.move(0.0, -0.06)
+            elif key == "DOWN":
+                flashlight.move(0.0, 0.06)
+            elif key == "LEFT":
+                flashlight.move(-0.06, 0.0)
+            elif key == "RIGHT":
+                flashlight.move(0.06, 0.0)
+
+        if flashlight is not None:
+            flashlight.update_time(timestamp)
+            frame = flashlight.apply_light(frame)
 
         term = get_size()
         curr_size = (term.columns, term.rows)
@@ -258,20 +284,30 @@ def render_loop(
 
         effective_source = source_size if source_size is not None else (frame.shape[1], frame.shape[0])
         fit_fn = getattr(renderer, "fit", None)
-        if fit_fn is not None and source_size is not None:
-            target_w, target_h = fit_fn(effective_source[0], effective_source[1], upscale=True)
+        if fit_fn is not None:
+            target_w, target_h = fit_fn(effective_source[0], effective_source[1], upscale=False)
             if (frame.shape[1], frame.shape[0]) != (target_w, target_h):
                 pil_frame = Image.fromarray(frame).resize(
                     (target_w, target_h), Image.Resampling.BILINEAR
                 )
                 frame = np.asarray(pil_frame)
 
+        if lyrics is not None:
+            curr_lyric = lyrics.get_line(timestamp)
+            if curr_lyric and hasattr(renderer, "set_active_text"):
+                renderer.set_active_text(curr_lyric)
+
         text = renderer.render(frame)
-        wait = timestamp - clock.position()
-        if wait > 0.002:
-            time.sleep(wait - 0.0015)
-        while timestamp - clock.position() > 0:
-            pass
+
+        if not live:
+            wait = timestamp - clock.position()
+            if wait > 0.002:
+                time.sleep(wait - 0.0015)
+            while timestamp - clock.position() > 0:
+                pass
+
+        if server is not None:
+            server.broadcast_frame(text)
         screen.draw(text)
 
 
@@ -280,6 +316,10 @@ def _play_once(
     renderer: BaseRenderer,
     screen: Screen,
     audio: AudioManager,
+    *,
+    lyrics: LyricEngine | None = None,
+    flashlight: Flashlight | None = None,
+    server: StreamServer | None = None,
 ) -> None:
 
     audio.prepare()
@@ -292,7 +332,18 @@ def _play_once(
     audio.start()
     try:
         source_size = getattr(source, "source_size", None)
-        render_loop(chain((first,), frames), renderer, screen, audio, source.fps, source_size=source_size)
+        render_loop(
+            chain((first,), frames),
+            renderer,
+            screen,
+            audio,
+            source.fps,
+            source_size=source_size,
+            audio=audio,
+            lyrics=lyrics,
+            flashlight=flashlight,
+            server=server,
+        )
     finally:
         source.close()
         audio.stop()
@@ -304,6 +355,10 @@ def play(
     fps: float = 20.0,
     loop: bool = False,
     muted: bool = False,
+    lyrics: LyricEngine | None = None,
+    flashlight: Flashlight | None = None,
+    server: StreamServer | None = None,
+    serve: int = 0,
 ) -> None:
 
     path = Path(path)
@@ -326,14 +381,29 @@ def play(
         assert info is not None
         return FFmpegSource(path, renderer, info, fps)
 
+    srv = server
+    if srv is None and serve > 0:
+        srv = StreamServer(port=serve)
+        srv.start()
+
     try:
         screen = Screen()
         with screen:
             while True:
                 renderer.refresh_size()
-                _play_once(make_source(), renderer, screen, audio)
+                _play_once(
+                    make_source(),
+                    renderer,
+                    screen,
+                    audio,
+                    lyrics=lyrics,
+                    flashlight=flashlight,
+                    server=srv,
+                )
                 if not loop:
                     break
                 time.sleep(0.15)
     finally:
+        if srv is not None and srv is not server:
+            srv.stop()
         audio.stop()

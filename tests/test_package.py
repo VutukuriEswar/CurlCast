@@ -22,12 +22,11 @@ def test_installed_metadata_matches_runtime_version() -> None:
 
 
 def test_public_api_is_importable() -> None:
-    from curlcast import audio, cli, demo, ffmpeg, player, renderers, terminal
+    from curlcast import audio, cli, ffmpeg, player, renderers, terminal
 
     assert callable(cli.main)
     assert renderers.available_modes() == ["ascii"]
     assert hasattr(audio, "AudioManager")
     assert hasattr(player, "play")
-    assert hasattr(demo, "run_demo")
     assert hasattr(ffmpeg, "probe_media")
     assert hasattr(terminal, "Screen")

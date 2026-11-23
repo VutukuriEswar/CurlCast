@@ -108,16 +108,20 @@ Historically, terminal media rendering has been plagued by crude monochrome char
 src/curlcast/
 ├── __init__.py          # Package version (__version__) and public metadata
 ├── __main__.py          # python -m curlcast invocation entrypoint
-├── cli.py               # Typer CLI application (view, play, demo commands)
-├── terminal.py          # Win32/POSIX terminal setup, sizing, flicker-free Screen
+├── cli.py               # Typer CLI application (view, play, cam, screen, broadcast)
+├── terminal.py          # Win32/POSIX terminal setup, sizing, non-blocking keys, flicker-free Screen
 ├── ffmpeg.py            # Bundled portable ffmpeg binary resolver & ffprobe parser
 ├── player.py            # Media frame decoders, bounded queues, drift-corrected loop
 ├── audio.py             # PortAudio (sounddevice) stream manager & fallback engines
-├── demo.py              # Self-contained NumPy plasma and 3D torus generators
+├── lyrics.py            # Timestamped .lrc/.srt subtitle parser & dynamic semantic glyph ramps
+├── capture.py           # Real-time webcam (ffmpeg/dshow/v4l2) and desktop screen grabber with split-region
+├── server.py            # AsyncIO HTTP chunked streaming server for vanilla curl clients
 ├── py.typed             # PEP 561 static typing marker
 └── renderers/
     ├── __init__.py      # Renderer registry (register_renderer, get_renderer)
     ├── base.py          # BaseRenderer abstract strategy & fit() geometry engine
+    ├── effects.py       # Retro CRT/Amber/Green/GameBoy/Synthwave shaders, Bayer/Floyd dithering, 3D
+    ├── normal.py        # 2.5D Sobel surface normal estimation & interactive flashlight
     ├── _pixels.py       # High-performance NumPy color quantization & helpers
     └── ascii.py         # Adaptive contrast ASCII art renderer
 ```
@@ -132,15 +136,15 @@ src/curlcast/
 
 **Video & Media Processing:**
 - **imageio-ffmpeg** (Bundles portable, self-contained FFmpeg binaries with zero system installation)
-- **Pillow (PIL)** (Image decoding, EXIF orientation correction, and animated GIF frame extraction)
-- **NumPy** (Vectorized RGB frame manipulation, contrast clipping, and generative mathematical demos)
+- **Pillow (PIL)** (Image decoding, EXIF orientation correction, screen capture, and animated GIF frame extraction)
+- **NumPy** (Vectorized RGB frame manipulation, contrast clipping, shaders, dithering, and surface normals)
 
 **Audio Engine & Synchronization:**
 - **sounddevice & PortAudio** (Low-latency asynchronous audio streaming and hardware-level master clock)
 - **ffplay / mpv / afplay** (Resilient secondary and platform-native audio fallbacks)
 
 **Terminal Graphics & System Integration:**
-- **ANSI 24-Bit TrueColor** (Full RGB `38;2;r;g;b` and `48;2;r;g;b` color gamut)
+- **ANSI 24-Bit TrueColor** (Full RGB `38;2;r;g;b` color gamut)
 - **Windows Virtual Terminal Processing** (`kernel32` Win32 API bridge enabling UTF-8 and VT escape sequences on Windows consoles)
 - **Single-Buffer In-Place Repainting** (`ESC[H` cursor-home repaint eliminating full-screen clear flicker)
 
@@ -188,20 +192,6 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-### Verification (Instant Demo)
-
-Test your terminal's TrueColor capabilities and playback engine instantly without downloading any media files:
-
-```bash
-curlcast demo
-```
-
-To run the 3D spinning torus in ASCII mode:
-
-```bash
-curlcast demo --animation torus --mode ascii
-```
-
 ---
 
 ## CLI Commands & Usage Reference
@@ -220,16 +210,33 @@ curlcast view photo.jpg --color
 # Constrain output width to 120 character columns
 curlcast view photo.jpg --width 120
 
-# Render without upscaling smaller images
-curlcast view logo.png --no-upscale
+# Render with retro CRT monitor scanlines
+curlcast view photo.jpg --color --shader crt
+
+# Render with ordered 8x8 Bayer dithering
+curlcast view photo.jpg --dither bayer
+
+# Interactive 2.5D flashlight (steer with arrow keys)
+curlcast view photo.jpg --flashlight
+
+# Red-cyan stereoscopic 3D
+curlcast view photo.jpg --3d
+
+# Render once and exit immediately
+curlcast view photo.jpg --once
 ```
 
 | Option | Flag | Default | Description |
 |---|---|---|---|
-| `--mode` | `-m` | `ascii` | Renderer mode (`ascii`). |
 | `--width` | `-w` | `0` (auto) | Output width in columns (`0` automatically fits terminal width). |
 | `--color` | — | `False` | Enables 24-bit RGB TrueColor output (default: monochrome). |
+| `--shader` | `-s` | `none` | Retro shader: `crt`, `amber`, `green`, `gameboy`, `synthwave`. |
+| `--dither` | — | `none` | Dithering engine: `bayer` (8x8 matrix) or `floyd` (error diffusion). |
+| `--3d` | — | `False` | Red-Cyan stereoscopic 3D mode. |
+| `--flashlight` | — | `False` | Interactive 2.5D flashlight with dynamic surface normals. |
+| `--text` | `-t` | `""` | Custom phrase for typographic ASCII rendering. |
 | `--no-upscale` | — | `False` | Prevents enlarging images smaller than the terminal viewport. |
+| `--once` | `-1` | `False` | Render once and exit without interactive viewer. |
 
 ---
 
@@ -244,52 +251,83 @@ curlcast play movie.mp4
 # Play video with full TrueColor enabled
 curlcast play movie.mp4 --color
 
-# Play video capped at 30 FPS
-curlcast play movie.mp4 --fps 30
+# Typographic video cinema (rendered using phrase, .srt, .lrc, or .txt file)
+curlcast play song.mp4 --color --text song.srt
 
-# Loop an animated GIF continuously
-curlcast play animation.gif --loop
+# Interactive 2.5D flashlight (steer with arrow keys)
+curlcast play movie.mp4 --flashlight
 
-# Play video muted
-curlcast play clip.mp4 --no-audio
+# Retro synthwave shader with 8x8 Bayer dithering
+curlcast play movie.mp4 --color --shader synthwave --dither bayer
+
+# Broadcast video live over local network to curl clients
+curlcast play movie.mp4 --serve 8080
 ```
 
 | Option | Flag | Default | Description |
 |---|---|---|---|
-| `--mode` | `-m` | `ascii` | Renderer mode (`ascii`). |
 | `--width` | `-w` | `0` (auto) | Output width in columns (`0` automatically fits terminal width). |
 | `--fps` | — | `20.0` | Target frame rate (1.0 to 120.0 FPS, capped at media source rate). |
 | `--loop` | `-l` | `False` | Loops playback continuously until stopped. |
 | `--no-audio` | — | `False` | Disables audio playback stream. |
 | `--color` | — | `False` | Enables 24-bit RGB TrueColor output (default: monochrome). |
+| `--shader` | `-s` | `none` | Retro shader: `crt`, `amber`, `green`, `gameboy`, `synthwave`. |
+| `--dither` | — | `none` | Dithering engine: `bayer` (8x8 matrix) or `floyd` (error diffusion). |
+| `--3d` | — | `False` | Red-Cyan stereoscopic 3D mode. |
+| `--text` | `-t` | `""` | Custom phrase, or path to `.srt`, `.lrc`, or `.txt` file for typographic rendering. |
+| `--flashlight` | — | `False` | Interactive 2.5D flashlight with dynamic surface normals. |
+| `--serve` | — | `0` | Broadcast stream on HTTP port for vanilla `curl` clients. |
 
-> **Playback Control:** Press **`Ctrl+C`** at any point to stop playback. CurlCast intercepts interrupts to restore cursor visibility, terminate audio streams, and cleanly kill background decoder processes.
+> **Playback Control:** Press **`Ctrl+C`** or **`q`** at any point to stop playback. When `--flashlight` is active, use **`Arrow Keys`** to steer the light beam.
 
 ---
 
-### 3. Generative Demos (`curlcast demo`)
+### 3. Live Webcam & Desktop Screen (`curlcast cam` / `curlcast screen`)
 
-Runs a real-time mathematical animation generated on-the-fly using NumPy arrays.
+Turn your terminal into a 60 FPS live retro webcam mirror or stream your desktop screen:
 
 ```bash
-# Run default plasma wave animation for 10 seconds
-curlcast demo
+# Live webcam in terminal
+curlcast cam
 
-# Run 3D z-buffered spinning torus for 30 seconds
-curlcast demo --animation torus --duration 30
+# Webcam with CRT scanlines in TrueColor
+curlcast cam --color --shader crt
 
-# Run plasma animation infinitely (press Ctrl+C to exit)
-curlcast demo --duration 0
+# Desktop screen mirror split to left half (avoids terminal recursion)
+curlcast screen --region left
+
+# Custom bounding box region: x,y,width,height
+curlcast screen --region 100,100,800,600
+
+# Stream webcam directly to local network for curl clients
+curlcast cam --serve 8080
 ```
 
 | Option | Flag | Default | Description |
 |---|---|---|---|
-| `--animation` | `-a` | `plasma` | Generative animation type: `plasma` or `torus`. |
-| `--mode` | `-m` | `ascii` | Renderer mode (`ascii`). |
-| `--width` | `-w` | `0` (auto) | Output width in columns (`0` fits terminal). |
-| `--fps` | — | `24.0` | Target animation frame rate (1.0 to 60.0 FPS). |
-| `--duration` | `-d` | `10.0` | Duration in seconds (`0` runs indefinitely until `Ctrl+C`). |
-| `--color` | — | `False` | Enables TrueColor output (default: monochrome). |
+| `--region` | — | `""` (full) | Screen region: `left`, `right`, `top`, `bottom`, or `x,y,w,h`. |
+| `--fps` | — | `20.0` | Capture frame rate (1.0 to 60.0 FPS). |
+| `--color` | — | `False` | Enables 24-bit TrueColor. |
+| `--shader` | `-s` | `none` | Retro shader (`crt`, `amber`, `green`, `gameboy`, `synthwave`). |
+| `--dither` | — | `none` | Dithering mode (`bayer` or `floyd`). |
+| `--serve` | — | `0` | Broadcast stream on HTTP port for vanilla `curl` clients. |
+
+---
+
+### 4. Local Network Broadcast (`curlcast broadcast`)
+
+Stream any media, webcam, or screen to any device on your Wi-Fi or LAN with zero client installation:
+
+```bash
+# Start broadcast server on port 8080
+curlcast broadcast movie.mp4 --port 8080
+
+# Broadcast webcam live over the network
+curlcast broadcast cam --port 8080
+
+# Viewers on any Mac, Linux, or Windows machine connect via curl:
+curl -sN http://<your-ip>:8080
+```
 
 ---
 

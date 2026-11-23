@@ -43,7 +43,7 @@ def test_view_ascii_does_not_emit_block_glyphs(tmp_path: Path) -> None:
     path = tmp_path / "pic.png"
     gradient_image(60, 40).save(path)
 
-    result = runner.invoke(app, ["view", str(path), "--mode", "ascii", "--width", "20"])
+    result = runner.invoke(app, ["view", str(path), "--width", "20"])
     assert result.exit_code == 0, result.output
     assert "▀" not in result.output
 
@@ -91,16 +91,6 @@ def test_play_rejects_invalid_fps(tmp_path: Path) -> None:
     path.write_bytes(b"fake")
     result = runner.invoke(app, ["play", str(path), "--fps", "0"])
     assert result.exit_code != 0
-
-
-def test_demo_runs_and_restores_the_cursor() -> None:
-    result = runner.invoke(
-        app,
-        ["demo", "--duration", "0.15", "--width", "24", "--fps", "30", "--mode", "ascii"],
-    )
-    assert result.exit_code == 0, result.output
-    assert "\x1b[?25l" in result.output
-    assert result.output.rstrip().endswith("\x1b[?25h")
 
 
 def test_play_gif_end_to_end(tmp_path: Path) -> None:

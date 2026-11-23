@@ -6,7 +6,7 @@ from conftest import gradient_image, strip_ansi
 from PIL import Image
 
 from curlcast.renderers import get_renderer
-from curlcast.renderers.ascii import RAMP, RAMP_ARRAY
+from curlcast.renderers.ascii import RAMP
 
 
 @pytest.mark.parametrize("color", [True, False])

@@ -15,6 +15,8 @@ CURSOR_HOME = "\x1b[H"
 CLEAR_SCREEN = "\x1b[2J"
 ERASE_BELOW = "\x1b[J"
 RESET = "\x1b[0m"
+DECAWM_DISABLE = "\x1b[?7l"
+DECAWM_ENABLE = "\x1b[?7h"
 
 _ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 _STD_OUTPUT_HANDLE = -11
@@ -83,7 +85,7 @@ class Screen:
             with contextlib.suppress(Exception):
                 import ctypes
                 ctypes.windll.winmm.timeBeginPeriod(1)
-        opening = HIDE_CURSOR
+        opening = HIDE_CURSOR + DECAWM_DISABLE
         if self._clear_on_enter:
             opening += CLEAR_SCREEN
         self.write(opening + CURSOR_HOME)
@@ -121,10 +123,10 @@ class Screen:
                 import ctypes
                 ctypes.windll.winmm.timeEndPeriod(1)
         with contextlib.suppress(BrokenPipeError, ValueError):
-            self.write(RESET + SHOW_CURSOR + "\n")
+            self.write(RESET + SHOW_CURSOR + DECAWM_ENABLE + "\n")
 
 
-def check_exit_key(timeout: float = 0.0) -> bool:
+def poll_input(timeout: float = 0.0) -> str | None:
     try:
         if os.name == "nt":
             import msvcrt
@@ -133,20 +135,63 @@ def check_exit_key(timeout: float = 0.0) -> bool:
             while True:
                 if msvcrt.kbhit():
                     ch = msvcrt.getch()
-                    if ch in (b"q", b"Q", b"\x1b", b"\r", b"\n", b" ", b"\x03"):
-                        return True
+                    if ch in (b"\x00", b"\xe0"):
+                        ch2 = msvcrt.getch()
+                        if ch2 == b"H":
+                            return "UP"
+                        if ch2 == b"P":
+                            return "DOWN"
+                        if ch2 == b"K":
+                            return "LEFT"
+                        if ch2 == b"M":
+                            return "RIGHT"
+                    elif ch in (b"w", b"W"):
+                        return "UP"
+                    elif ch in (b"s", b"S"):
+                        return "DOWN"
+                    elif ch in (b"a", b"A"):
+                        return "LEFT"
+                    elif ch in (b"d", b"D"):
+                        return "RIGHT"
+                    elif ch in (b"q", b"Q", b"\x1b", b"\r", b"\n", b" ", b"\x03"):
+                        return "EXIT"
                 if time.perf_counter() >= end_time:
                     break
-                time.sleep(0.01)
-            return False
+                time.sleep(0.005)
+            return None
         else:
             import select
 
             r, _, _ = select.select([sys.stdin], [], [], max(0.0, timeout))
             if r:
-                ch = sys.stdin.read(1)
-                if ch in ("q", "Q", "\x1b", "\r", "\n", " ", "\x03"):
-                    return True
-            return False
+                char_in = sys.stdin.read(1)
+                if char_in in ("q", "Q", "\r", "\n", " ", "\x03"):
+                    return "EXIT"
+                if char_in in ("w", "W"):
+                    return "UP"
+                if char_in in ("s", "S"):
+                    return "DOWN"
+                if char_in in ("a", "A"):
+                    return "LEFT"
+                if char_in in ("d", "D"):
+                    return "RIGHT"
+                if char_in == "\x1b":
+                    r2, _, _ = select.select([sys.stdin], [], [], 0.02)
+                    if r2:
+                        seq = sys.stdin.read(2)
+                        if seq == "[A":
+                            return "UP"
+                        if seq == "[B":
+                            return "DOWN"
+                        if seq == "[C":
+                            return "RIGHT"
+                        if seq == "[D":
+                            return "LEFT"
+                    return "EXIT"
+            return None
     except Exception:
-        return False
+        return None
+
+
+def check_exit_key(timeout: float = 0.0) -> bool:
+    return poll_input(timeout=timeout) == "EXIT"
