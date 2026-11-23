@@ -13,7 +13,9 @@ from curlcast.renderers.effects import (
     apply_shader,
 )
 
-RAMP = " `.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@"
+RAMP = (
+    " `.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@"
+)
 
 RAMP_BW = RAMP
 
@@ -208,7 +210,13 @@ class AsciiRenderer(BaseRenderer):
 
         if not self.color and height > 2 and width > 2:
             pad = np.pad(l_int, 1, mode="edge")
-            lap = 4 * l_int.astype(np.int16) - pad[:-2, 1:-1] - pad[2:, 1:-1] - pad[1:-1, :-2] - pad[1:-1, 2:]
+            lap = (
+                4 * l_int.astype(np.int16)
+                - pad[:-2, 1:-1]
+                - pad[2:, 1:-1]
+                - pad[1:-1, :-2]
+                - pad[1:-1, 2:]
+            )
             l_int = np.clip(l_int.astype(np.int16) + (lap >> 3), 0, 255).astype(np.uint8)
 
         if self.dither != DitherMode.NONE:

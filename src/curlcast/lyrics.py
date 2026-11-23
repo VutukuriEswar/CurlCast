@@ -98,7 +98,7 @@ class TextEngine:
         blocks = re.split(r"(?:\r?\n){2,}", text.strip())
         self._entries = []
         for b in blocks:
-            lines = [l.strip() for l in b.splitlines() if l.strip()]
+            lines = [line.strip() for line in b.splitlines() if line.strip()]
             if len(lines) >= 2:
                 m = pattern.search(lines[1])
                 if not m and len(lines) >= 3:
@@ -131,7 +131,7 @@ class TextEngine:
         if t >= self._entries[-1][1]:
             return self._entries[-1][2]
         last_txt = self._entries[0][2]
-        for start, end, txt in self._entries:
+        for start, _end, txt in self._entries:
             if t >= start:
                 last_txt = txt
             else:

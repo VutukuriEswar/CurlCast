@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -88,7 +87,9 @@ def view(
     width: int = typer.Option(
         0, "--width", "-w", min=0, help="Output width in columns (0 = fit terminal)."
     ),
-    color: bool = typer.Option(False, "--color", help="Enable color output (default: black & white)."),
+    color: bool = typer.Option(
+        False, "--color", help="Enable color output (default: black & white)."
+    ),
     shader: ShaderMode = typer.Option(
         ShaderMode.NONE, "--shader", "-s", help="Retro aesthetic shader.", case_sensitive=False
     ),
@@ -216,7 +217,9 @@ def play(
     ),
     loop: bool = typer.Option(False, "--loop", "-l", help="Loop until interrupted."),
     no_audio: bool = typer.Option(False, "--no-audio", help="Disable audio playback."),
-    color: bool = typer.Option(False, "--color", help="Enable color output (default: black & white)."),
+    color: bool = typer.Option(
+        False, "--color", help="Enable color output (default: black & white)."
+    ),
     shader: ShaderMode = typer.Option(
         ShaderMode.NONE, "--shader", "-s", help="Retro aesthetic shader.", case_sensitive=False
     ),
@@ -230,7 +233,7 @@ def play(
         False, "--flashlight", help="Interactive 2.5D flashlight with dynamic surface normals."
     ),
     text: str = typer.Option(
-        "", "--text", "-t", help="Custom phrase, or path to .srt/.lrc/.txt file for typographic rendering."
+        "", "--text", "-t", help="Phrase or path to .srt/.lrc/.txt file for typographic rendering."
     ),
     serve: int = typer.Option(
         0, "--serve", help="Local HTTP port to broadcast stream to curl clients."
@@ -295,7 +298,9 @@ def cam(
         0, "--width", "-w", min=0, help="Output width in columns (0 = fit terminal)."
     ),
     fps: float = typer.Option(30.0, "--fps", min=1.0, max=60.0, help="Camera frame rate."),
-    color: bool = typer.Option(False, "--color", help="Enable color output (default: black & white)."),
+    color: bool = typer.Option(
+        False, "--color", help="Enable color output (default: black & white)."
+    ),
     shader: ShaderMode = typer.Option(
         ShaderMode.NONE, "--shader", "-s", help="Retro aesthetic shader.", case_sensitive=False
     ),
@@ -355,13 +360,15 @@ def cam(
 @app.command()
 def screen(
     region: str = typer.Option(
-        "", "--region", help="Screen region to capture: 'left', 'right', 'top', 'bottom', or 'x,y,w,h'."
+        "", "--region", help="Region to capture: 'left', 'right', 'top', 'bottom', or 'x,y,w,h'."
     ),
     width: int = typer.Option(
         0, "--width", "-w", min=0, help="Output width in columns (0 = fit terminal)."
     ),
     fps: float = typer.Option(30.0, "--fps", min=1.0, max=60.0, help="Screen capture frame rate."),
-    color: bool = typer.Option(False, "--color", help="Enable color output (default: black & white)."),
+    color: bool = typer.Option(
+        False, "--color", help="Enable color output (default: black & white)."
+    ),
     shader: ShaderMode = typer.Option(
         ShaderMode.NONE, "--shader", "-s", help="Retro aesthetic shader.", case_sensitive=False
     ),
@@ -433,8 +440,12 @@ def screen(
 
 @app.command()
 def broadcast(
-    target: str = typer.Argument(..., metavar="TARGET", help="Media file, 'cam', or 'screen' to broadcast."),
-    port: int = typer.Option(8080, "--port", "-p", min=1024, max=65535, help="HTTP streaming port."),
+    target: str = typer.Argument(
+        ..., metavar="TARGET", help="Media file, 'cam', or 'screen' to broadcast."
+    ),
+    port: int = typer.Option(
+        8080, "--port", "-p", min=1024, max=65535, help="HTTP streaming port."
+    ),
     width: int = typer.Option(
         80, "--width", "-w", min=10, help="Stream column width."
     ),

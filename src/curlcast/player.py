@@ -282,7 +282,9 @@ def render_loop(
             if hasattr(renderer, "refresh_size"):
                 renderer.refresh_size()
 
-        effective_source = source_size if source_size is not None else (frame.shape[1], frame.shape[0])
+        effective_source = (
+            source_size if source_size is not None else (frame.shape[1], frame.shape[0])
+        )
         fit_fn = getattr(renderer, "fit", None)
         if fit_fn is not None:
             target_w, target_h = fit_fn(effective_source[0], effective_source[1], upscale=False)

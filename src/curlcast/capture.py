@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
+from typing import cast
 
 import numpy as np
 from PIL import Image, ImageGrab
@@ -61,7 +62,7 @@ def _find_terminal_window() -> int:
         root = user32.GetAncestor(fg, 2) or fg
         cname = _get_class(root)
         if "CASCADIA" in cname or "Console" in cname or "Terminal" in cname:
-            return root
+            return int(root)
 
     found_cascadia: list[int] = []
     found_console: list[int] = []
@@ -79,15 +80,15 @@ def _find_terminal_window() -> int:
     user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
 
     if found_cascadia:
-        return found_cascadia[0]
+        return int(found_cascadia[0])
     if fg and user32.IsWindowVisible(fg):
-        return user32.GetAncestor(fg, 2) or fg
+        return int(user32.GetAncestor(fg, 2) or fg)
     if found_console:
-        return found_console[0]
+        return int(found_console[0])
 
     cw = kernel32.GetConsoleWindow()
     if cw and user32.IsWindowVisible(cw):
-        return user32.GetAncestor(cw, 2) or cw
+        return int(user32.GetAncestor(cw, 2) or cw)
     return 0
 
 
@@ -147,7 +148,7 @@ def _capture_clean_desktop() -> np.ndarray | None:
         gdi32.DeleteObject(h_bmp)
         gdi32.DeleteDC(h_mem_dc)
         user32.ReleaseDC(0, h_dc)
-        return rgb
+        return cast("np.ndarray", rgb)
     except Exception:
         try:
             return np.array(ImageGrab.grab().convert("RGB"), copy=True)
@@ -240,7 +241,7 @@ class FastScreenCapture:
                 self.sh,
                 0x00CC0020,
             )
-            return self._arr[:, :, [2, 1, 0]].copy()
+            return cast("np.ndarray", self._arr[:, :, [2, 1, 0]].copy())
         except Exception:
             return None
 
@@ -494,7 +495,10 @@ class ScreenSource:
         else:
             self._target_size = (120, 40)
 
-        if self._fast_cap is not None and (self._fast_cap.tw, self._fast_cap.th) != self._target_size:
+        if (
+            self._fast_cap is not None
+            and (self._fast_cap.tw, self._fast_cap.th) != self._target_size
+        ):
             self._fast_cap.close()
             self._fast_cap = FastScreenCapture(self._target_size[0], self._target_size[1])
 
@@ -531,8 +535,10 @@ class ScreenSource:
                 box = self._win_mgr.get_window_box()
                 if box is not None:
                     th, tw = arr.shape[:2]
-                    sw = getattr(self._fast_cap, "sw", self.source_size[0] if self.source_size else 1600)
-                    sh = getattr(self._fast_cap, "sh", self.source_size[1] if self.source_size else 1000)
+                    default_sw = self.source_size[0] if self.source_size else 1600
+                    default_sh = self.source_size[1] if self.source_size else 1000
+                    sw = getattr(self._fast_cap, "sw", default_sw)
+                    sh = getattr(self._fast_cap, "sh", default_sh)
                     bx1 = max(0, min(tw, int(round(box[0] * tw / sw))))
                     by1 = max(0, min(th, int(round(box[1] * th / sh))))
                     bx2 = max(0, min(tw, int(round(box[2] * tw / sw))))
@@ -612,7 +618,18 @@ def _detect_webcam_cmd(device: str, fps: float, width: int = 640, height: int = 
         if target_device:
             try:
                 test_proc = subprocess.run(
-                    [exe, "-f", "dshow", "-i", f"video={target_device}", "-vframes", "1", "-f", "null", "-"],
+                    [
+                        exe,
+                        "-f",
+                        "dshow",
+                        "-i",
+                        f"video={target_device}",
+                        "-vframes",
+                        "1",
+                        "-f",
+                        "null",
+                        "-",
+                    ],
                     capture_output=True,
                     timeout=2.0,
                 )
@@ -716,14 +733,10 @@ class WebcamSource:
                         break
                     frame = np.frombuffer(raw, dtype=np.uint8).reshape(self.height, self.width, 3)
                     if q.full():
-                        try:
+                        with contextlib.suppress(queue.Empty):
                             q.get_nowait()
-                        except queue.Empty:
-                            pass
-                    try:
+                    with contextlib.suppress(queue.Full):
                         q.put(frame, timeout=0.05)
-                    except queue.Full:
-                        pass
             finally:
                 with contextlib.suppress(Exception):
                     q.put(None)

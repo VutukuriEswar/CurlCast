@@ -91,14 +91,10 @@ class StreamServer:
         def _dispatch() -> None:
             for q in list(self._queues):
                 if q.full():
-                    try:
+                    with contextlib.suppress(asyncio.QueueEmpty):
                         q.get_nowait()
-                    except asyncio.QueueEmpty:
-                        pass
-                try:
+                with contextlib.suppress(asyncio.QueueFull):
                     q.put_nowait(data)
-                except asyncio.QueueFull:
-                    pass
 
         self._loop.call_soon_threadsafe(_dispatch)
 

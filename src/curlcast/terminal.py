@@ -108,10 +108,7 @@ class Screen:
         self.write(CLEAR_SCREEN + CURSOR_HOME)
 
     def draw(self, frame: str) -> None:
-        if "\n" in frame:
-            body = "\x1b[K\n".join(frame.split("\n")) + "\x1b[K"
-        else:
-            body = frame
+        body = "\x1b[K\n".join(frame.split("\n")) + "\x1b[K" if "\n" in frame else frame
         self.write(CURSOR_HOME + body + ERASE_BELOW)
 
     def close(self) -> None:
