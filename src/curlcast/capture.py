@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 from PIL import Image, ImageGrab
@@ -49,8 +49,11 @@ def _find_terminal_window() -> int:
     import ctypes
     from ctypes import wintypes
 
-    user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
+    windll: Any = getattr(ctypes, "windll", None)
+    if windll is None:
+        return 0
+    user32 = windll.user32
+    kernel32 = windll.kernel32
 
     def _get_class(h: int) -> str:
         buf = ctypes.create_unicode_buffer(256)
@@ -76,7 +79,8 @@ def _find_terminal_window() -> int:
                 found_console.append(h)
         return True
 
-    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    winfunctype: Any = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)
+    WNDENUMPROC = winfunctype(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
 
     if found_cascadia:
@@ -102,8 +106,11 @@ def _capture_clean_desktop() -> np.ndarray | None:
     from ctypes import wintypes
 
     try:
-        user32 = ctypes.windll.user32
-        gdi32 = ctypes.windll.gdi32
+        windll: Any = getattr(ctypes, "windll", None)
+        if windll is None:
+            return None
+        user32 = windll.user32
+        gdi32 = windll.gdi32
         h_dc = user32.GetDC(0)
         sw = gdi32.GetDeviceCaps(h_dc, 8)
         sh = gdi32.GetDeviceCaps(h_dc, 10)
@@ -167,8 +174,11 @@ class FastScreenCapture:
         from ctypes import wintypes
 
         try:
-            self.user32 = ctypes.windll.user32
-            self.gdi32 = ctypes.windll.gdi32
+            windll: Any = getattr(ctypes, "windll", None)
+            if windll is None:
+                return
+            self.user32 = windll.user32
+            self.gdi32 = windll.gdi32
 
             self.hScreenDC = self.user32.GetDC(0)
             self.sw = self.gdi32.GetDeviceCaps(self.hScreenDC, 8)
@@ -268,13 +278,16 @@ class WindowManager:
         from ctypes import wintypes
 
         try:
+            windll: Any = getattr(ctypes, "windll", None)
+            if windll is None:
+                return None
             try:
-                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+                windll.shcore.SetProcessDpiAwareness(2)
             except Exception:
                 with contextlib.suppress(Exception):
-                    ctypes.windll.user32.SetProcessDPIAware()
+                    windll.user32.SetProcessDPIAware()
 
-            user32 = ctypes.windll.user32
+            user32 = windll.user32
             hwnd = _find_terminal_window()
             if not hwnd:
                 return None
@@ -387,8 +400,11 @@ class WindowManager:
                 ]
 
             rect = RECT()
-            user32 = ctypes.windll.user32
-            dwmapi = getattr(ctypes.windll, "dwmapi", None)
+            windll: Any = getattr(ctypes, "windll", None)
+            if windll is None:
+                return None
+            user32 = windll.user32
+            dwmapi = getattr(windll, "dwmapi", None)
             got_rect = False
             if dwmapi is not None:
                 hr = dwmapi.DwmGetWindowAttribute(
@@ -415,7 +431,10 @@ class WindowManager:
         import ctypes
 
         try:
-            user32 = ctypes.windll.user32
+            windll: Any = getattr(ctypes, "windll", None)
+            if windll is None:
+                return
+            user32 = windll.user32
             with contextlib.suppress(Exception):
                 user32.SetWindowDisplayAffinity(self.hwnd, 0)
             user32.SetWindowPos(

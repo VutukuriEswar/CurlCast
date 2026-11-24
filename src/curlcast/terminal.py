@@ -7,7 +7,7 @@ import sys
 import time
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TextIO
+from typing import Any, TextIO
 
 HIDE_CURSOR = "\x1b[?25l"
 SHOW_CURSOR = "\x1b[?25h"
@@ -40,7 +40,10 @@ def _enable_windows_ansi() -> None:
     try:
         import ctypes
 
-        kernel32 = ctypes.windll.kernel32
+        windll: Any = getattr(ctypes, "windll", None)
+        if windll is None:
+            return
+        kernel32 = windll.kernel32
         kernel32.SetConsoleOutputCP(_CP_UTF8)
         handle = kernel32.GetStdHandle(_STD_OUTPUT_HANDLE)
         mode = ctypes.c_uint32()
@@ -84,7 +87,10 @@ class Screen:
         if os.name == "nt":
             with contextlib.suppress(Exception):
                 import ctypes
-                ctypes.windll.winmm.timeBeginPeriod(1)
+
+                windll: Any = getattr(ctypes, "windll", None)
+                if windll is not None:
+                    windll.winmm.timeBeginPeriod(1)
         opening = HIDE_CURSOR + DECAWM_DISABLE
         if self._clear_on_enter:
             opening += CLEAR_SCREEN
@@ -118,7 +124,10 @@ class Screen:
         if os.name == "nt":
             with contextlib.suppress(Exception):
                 import ctypes
-                ctypes.windll.winmm.timeEndPeriod(1)
+
+                windll: Any = getattr(ctypes, "windll", None)
+                if windll is not None:
+                    windll.winmm.timeEndPeriod(1)
         with contextlib.suppress(BrokenPipeError, ValueError):
             self.write(RESET + SHOW_CURSOR + DECAWM_ENABLE + "\n")
 
@@ -128,12 +137,13 @@ def poll_input(timeout: float = 0.0) -> str | None:
         if os.name == "nt":
             import msvcrt
 
+            msvcrt_any: Any = msvcrt
             end_time = time.perf_counter() + max(0.0, timeout)
             while True:
-                if msvcrt.kbhit():
-                    ch = msvcrt.getch()
+                if msvcrt_any.kbhit():
+                    ch = msvcrt_any.getch()
                     if ch in (b"\x00", b"\xe0"):
-                        ch2 = msvcrt.getch()
+                        ch2 = msvcrt_any.getch()
                         if ch2 == b"H":
                             return "UP"
                         if ch2 == b"P":
