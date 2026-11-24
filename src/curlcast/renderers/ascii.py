@@ -22,7 +22,7 @@ RAMP_BW = RAMP
 RAMP_ARRAY = np.array(list(RAMP), dtype="<U1")
 RAMP_BW_ARRAY = RAMP_ARRAY
 
-_RESET     = "\x1b[0m"
+_RESET = "\x1b[0m"
 _MAX_CACHE = 16_384
 
 
@@ -121,7 +121,7 @@ class AsciiRenderer(BaseRenderer):
         self._high = None
 
     def _contrast_window(self, luminance: np.ndarray) -> tuple[float, float]:
-        low  = float(np.percentile(luminance, 1.0))
+        low = float(np.percentile(luminance, 1.0))
         high = float(np.percentile(luminance, 99.0))
         if high - low < 1.0:
             low, high = float(luminance.min()), float(luminance.max())
@@ -132,7 +132,7 @@ class AsciiRenderer(BaseRenderer):
             self._low, self._high = low, high
         else:
             alpha = 0.15
-            self._low  = self._low  * (1.0 - alpha) + low  * alpha
+            self._low = self._low * (1.0 - alpha) + low * alpha
             self._high = self._high * (1.0 - alpha) + high * alpha
 
         return self._low, max(self._high, self._low + 1.0)
@@ -142,8 +142,8 @@ class AsciiRenderer(BaseRenderer):
         if code is not None:
             return code
         r = (packed >> 16) & 0xFF
-        g = (packed >>  8) & 0xFF
-        b =  packed        & 0xFF
+        g = (packed >> 8) & 0xFF
+        b = packed & 0xFF
         code = f"\x1b[38;2;{r};{g};{b}m"
         if len(self._color_cache) >= _MAX_CACHE:
             self._color_cache.clear()

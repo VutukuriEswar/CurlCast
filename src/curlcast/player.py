@@ -52,6 +52,7 @@ class Clock(Protocol):
     def position(self) -> float:
         ...
 
+
 class PerfClock:
 
     def __init__(self) -> None:
@@ -64,6 +65,7 @@ class PerfClock:
 def available_audio_backends() -> list[str]:
     from curlcast.audio import available_backends
     return available_backends()
+
 
 def _read_exact(stream: IO[bytes], size: int) -> bytes | None:
     buffer = bytearray()
@@ -200,6 +202,7 @@ def _put(
         except queue.Full:
             continue
 
+
 class GifSource:
     fps: float = 20.0
 
@@ -238,6 +241,7 @@ class GifSource:
 
     def close(self) -> None:
         pass
+
 
 def render_loop(
     frames: Iterable[Frame],

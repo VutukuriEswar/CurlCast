@@ -22,6 +22,7 @@ CHUNK_BYTES = CHUNK_FRAMES * CHANNELS * BYTES_PER_SAMPLE
 _SD_STATE: bool | None = None
 _WARNED = False
 
+
 def _sounddevice_available() -> bool:
     global _SD_STATE
     if _SD_STATE is None:
@@ -86,6 +87,7 @@ def _spawn(cmd: list[str]) -> subprocess.Popen[Any] | None:
         )
     except (FileNotFoundError, OSError):
         return None
+
 
 class AudioManager:
     def __init__(self, source: Path, *, muted: bool = False, has_audio: bool = True) -> None:

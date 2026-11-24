@@ -6,7 +6,7 @@ from conftest import gradient_image, strip_ansi
 from PIL import Image
 
 from curlcast.renderers import get_renderer
-from curlcast.renderers.ascii import RAMP
+from curlcast.renderers.ascii import RAMP, AsciiRenderer
 
 
 @pytest.mark.parametrize("color", [True, False])
@@ -69,6 +69,7 @@ def test_ascii_contrast_makes_dark_frames_legible() -> None:
 
 def test_contrast_window_is_smoothed_across_frames() -> None:
     renderer = get_renderer("ascii", width=20, rows=10, color=False)
+    assert isinstance(renderer, AsciiRenderer)
     renderer.render(np.full((10, 20, 3), 20, dtype=np.uint8))
     first = (renderer._low, renderer._high)
     renderer.render(np.full((10, 20, 3), 240, dtype=np.uint8))

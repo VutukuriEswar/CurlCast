@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 
 
@@ -112,4 +114,4 @@ class Flashlight:
             light_mult = light_mult[..., None]
 
         lit = rgb.astype(np.float32) * light_mult
-        return np.clip(lit, 0.0, 255.0).astype(rgb.dtype)
+        return cast(np.ndarray, np.clip(lit, 0.0, 255.0).astype(rgb.dtype))

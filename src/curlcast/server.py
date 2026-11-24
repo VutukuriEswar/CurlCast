@@ -38,8 +38,11 @@ class StreamServer:
             server = await asyncio.start_server(self._handle_client, self.host, self.port)
             self._server = server
             self._started.set()
-            async with server:
-                await server.serve_forever()
+            try:
+                async with server:
+                    await server.serve_forever()
+            except (asyncio.CancelledError, Exception):
+                pass
 
         try:
             loop.run_until_complete(_main())
@@ -47,6 +50,11 @@ class StreamServer:
             pass
         finally:
             with contextlib.suppress(Exception):
+                pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+                for task in pending:
+                    task.cancel()
+                if pending and not loop.is_closed():
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 loop.close()
 
     async def _handle_client(

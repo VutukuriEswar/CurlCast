@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import io
 import time
+from typing import Any
 
 import numpy as np
 
 from curlcast.audio import AudioManager, available_backends
 from curlcast.player import PerfClock, render_loop
+from curlcast.renderers.base import BaseRenderer
 from curlcast.terminal import Screen
 
 
@@ -18,16 +20,17 @@ class FixedClock:
         return self.value
 
 
-class DummyRenderer:
-    cols = 80
-    rows = 24
+class DummyRenderer(BaseRenderer):
+    def __init__(self) -> None:
+        super().__init__(width=80, rows=24)
 
     def render(self, frame: np.ndarray) -> str:
         return "FRAME"
 
 
-class RecordingScreen:
+class RecordingScreen(Screen):
     def __init__(self) -> None:
+        super().__init__(io.StringIO())
         self.frames: list[str] = []
 
     def write(self, text: str) -> None:
@@ -103,14 +106,15 @@ def test_screen_clear_emits_clear_and_home() -> None:
 
 
 def test_render_loop_resizes_frame_when_dimensions_differ() -> None:
-    class SizingRenderer:
+    class SizingRenderer(BaseRenderer):
         def __init__(self) -> None:
+            super().__init__(width=40, rows=20)
             self.rendered_shapes: list[tuple[int, int]] = []
 
         def fit(self, w: int, h: int, upscale: bool = False) -> tuple[int, int]:
             return (40, 20)
 
-        def refresh_size(self, *args, **kwargs) -> bool:
+        def refresh_size(self, *args: Any, **kwargs: Any) -> bool:
             return False
 
         def render(self, frame: np.ndarray) -> str:
