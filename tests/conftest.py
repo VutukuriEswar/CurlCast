@@ -26,3 +26,10 @@ def gradient_image(width: int = 160, height: int = 120) -> Image.Image:
 @pytest.fixture
 def gradient() -> Image.Image:
     return gradient_image()
+
+
+@pytest.fixture(autouse=True)
+def _plain_cli_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setenv("COLUMNS", "200")

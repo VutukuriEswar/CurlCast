@@ -81,22 +81,28 @@ def test_webcam_source_testsrc():
 
 
 def test_cli_phase4_commands_help():
+    from conftest import strip_ansi
+
     runner = CliRunner()
-    res_root = runner.invoke(app, ["--help"])
+    res_root = runner.invoke(app, ["--help"], env={"NO_COLOR": "1", "COLUMNS": "200"})
     assert res_root.exit_code == 0
-    assert "cam" in res_root.output
-    assert "screen" in res_root.output
-    assert "broadcast" in res_root.output
+    root_out = strip_ansi(res_root.output)
+    assert "cam" in root_out
+    assert "screen" in root_out
+    assert "broadcast" in root_out
 
-    res_cam = runner.invoke(app, ["cam", "--help"])
+    res_cam = runner.invoke(app, ["cam", "--help"], env={"NO_COLOR": "1", "COLUMNS": "200"})
     assert res_cam.exit_code == 0
-    assert "--fps" in res_cam.output
-    assert "--serve" in res_cam.output
+    cam_out = strip_ansi(res_cam.output)
+    assert "--fps" in cam_out
+    assert "--serve" in cam_out
 
-    res_screen = runner.invoke(app, ["screen", "--help"])
+    res_screen = runner.invoke(app, ["screen", "--help"], env={"NO_COLOR": "1", "COLUMNS": "200"})
     assert res_screen.exit_code == 0
-    assert "--fps" in res_screen.output
+    screen_out = strip_ansi(res_screen.output)
+    assert "--fps" in screen_out
 
-    res_bcast = runner.invoke(app, ["broadcast", "--help"])
+    res_bcast = runner.invoke(app, ["broadcast", "--help"], env={"NO_COLOR": "1", "COLUMNS": "200"})
     assert res_bcast.exit_code == 0
-    assert "--port" in res_bcast.output
+    bcast_out = strip_ansi(res_bcast.output)
+    assert "--port" in bcast_out

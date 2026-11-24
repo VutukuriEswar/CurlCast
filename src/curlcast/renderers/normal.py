@@ -15,7 +15,7 @@ def compute_normals(luma: np.ndarray, strength: float = 1.5) -> np.ndarray:
         return normals
 
     luma_f = luma.astype(np.float32)
-    if luma_f.max() > 1.0:
+    if float(np.max(luma_f)) > 1.0:
         luma_f /= 255.0
 
     pad = np.pad(luma_f, 1, mode="edge")
